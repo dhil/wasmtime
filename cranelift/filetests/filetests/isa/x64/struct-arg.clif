@@ -27,10 +27,10 @@ block0(v0: i64, v1: i64):
 ;   pushq   %rbp
 ;   movq    %rsp, %rbp
 ; block0:
-;   lea     16(%rbp), %rsi
+;   lea     16(%rbp), %rcx
 ;   movzbq  0(%rdi), %rax
-;   movzbq  0(%rsi), %r10
-;   addl    %eax, %r10d, %eax
+;   movzbq  0(%rcx), %r9
+;   addl    %eax, %r9d, %eax
 ;   movq    %rbp, %rsp
 ;   popq    %rbp
 ;   ret
@@ -46,15 +46,14 @@ block0(v0: i64):
 ;   pushq   %rbp
 ;   movq    %rsp, %rbp
 ; block0:
-;   movq    %rdi, %r8
+;   movq    %rdi, %rsi
 ;   subq    %rsp, $64, %rsp
 ;   virtual_sp_offset_adjust 64
 ;   lea     0(%rsp), %rdi
-;   movq    %r8, %rsi
 ;   movl    $64, %edx
-;   load_ext_name %Memcpy+0, %rcx
-;   call    *%rcx
-;   call    User { namespace: 0, index: 0 }
+;   load_ext_name %Memcpy+0, %r11
+;   call    *%r11
+;   call    User(userextname0)
 ;   addq    %rsp, $64, %rsp
 ;   virtual_sp_offset_adjust -64
 ;   movq    %rbp, %rsp
@@ -72,20 +71,20 @@ block0(v0: i64, v1: i64):
 ;   pushq   %rbp
 ;   movq    %rsp, %rbp
 ;   subq    %rsp, $16, %rsp
-;   movq    %r12, 0(%rsp)
+;   movq    %r13, 0(%rsp)
 ; block0:
-;   movq    %rdi, %r12
+;   movq    %rdi, %r13
 ;   subq    %rsp, $64, %rsp
 ;   virtual_sp_offset_adjust 64
 ;   lea     0(%rsp), %rdi
 ;   movl    $64, %edx
-;   load_ext_name %Memcpy+0, %rcx
-;   call    *%rcx
-;   movq    %r12, %rdi
-;   call    User { namespace: 0, index: 0 }
+;   load_ext_name %Memcpy+0, %rax
+;   call    *%rax
+;   movq    %r13, %rdi
+;   call    User(userextname0)
 ;   addq    %rsp, $64, %rsp
 ;   virtual_sp_offset_adjust -64
-;   movq    0(%rsp), %r12
+;   movq    0(%rsp), %r13
 ;   addq    %rsp, $16, %rsp
 ;   movq    %rbp, %rsp
 ;   popq    %rbp
@@ -103,10 +102,10 @@ block0(v0: i64, v1: i64):
 ;   movq    %rsp, %rbp
 ; block0:
 ;   lea     16(%rbp), %rsi
-;   lea     144(%rbp), %rdi
+;   lea     144(%rbp), %rcx
 ;   movzbq  0(%rsi), %rax
-;   movzbq  0(%rdi), %r10
-;   addl    %eax, %r10d, %eax
+;   movzbq  0(%rcx), %r9
+;   addl    %eax, %r9d, %eax
 ;   movq    %rbp, %rsp
 ;   popq    %rbp
 ;   ret
@@ -122,27 +121,27 @@ block0(v0: i64, v1: i64, v2: i64):
 ;   pushq   %rbp
 ;   movq    %rsp, %rbp
 ;   subq    %rsp, $16, %rsp
-;   movq    %rbx, 0(%rsp)
+;   movq    %r12, 0(%rsp)
 ;   movq    %r14, 8(%rsp)
 ; block0:
-;   movq    %rdi, %r14
-;   movq    %rdx, %rbx
+;   movq    %rdx, %r14
+;   movq    %rdi, %r12
 ;   subq    %rsp, $192, %rsp
 ;   virtual_sp_offset_adjust 192
 ;   lea     0(%rsp), %rdi
 ;   movl    $128, %edx
-;   load_ext_name %Memcpy+0, %rcx
-;   call    *%rcx
+;   load_ext_name %Memcpy+0, %rax
+;   call    *%rax
 ;   lea     128(%rsp), %rdi
-;   movq    %rbx, %rsi
 ;   movl    $64, %edx
-;   load_ext_name %Memcpy+0, %rcx
-;   call    *%rcx
-;   movq    %r14, %rdi
-;   call    User { namespace: 0, index: 0 }
+;   load_ext_name %Memcpy+0, %r11
+;   movq    %r14, %rsi
+;   call    *%r11
+;   movq    %r12, %rdi
+;   call    User(userextname0)
 ;   addq    %rsp, $192, %rsp
 ;   virtual_sp_offset_adjust -192
-;   movq    0(%rsp), %rbx
+;   movq    0(%rsp), %r12
 ;   movq    8(%rsp), %r14
 ;   addq    %rsp, $16, %rsp
 ;   movq    %rbp, %rsp

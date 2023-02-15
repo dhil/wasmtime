@@ -36,8 +36,8 @@ block0(v0: i32, v1: i32):
 }
 
 ; block0:
-;   mov w6, w0
-;   ldr w0, [x6, w1, UXTW]
+;   mov w3, w0
+;   ldr w0, [x3, w1, UXTW]
 ;   ret
 
 function %f8(i64, i32) -> i32 {
@@ -52,10 +52,10 @@ block0(v0: i64, v1: i32):
 }
 
 ; block0:
-;   add x6, x0, #68
-;   add x6, x6, x0
-;   add x6, x6, x1, SXTW
-;   ldr w0, [x6, w1, SXTW]
+;   add x3, x0, #68
+;   add x5, x3, x0
+;   add x7, x5, x1, SXTW
+;   ldr w0, [x7, w1, SXTW]
 ;   ret
 
 function %f9(i64, i64, i64) -> i32 {
@@ -69,9 +69,9 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   add x0, x0, x2
-;   add x0, x0, x1
-;   ldr w0, [x0, #48]
+;   add x4, x0, x2
+;   add x6, x4, x1
+;   ldr w0, [x6, #48]
 ;   ret
 
 function %f10(i64, i64, i64) -> i32 {
@@ -85,9 +85,9 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   movz x8, #4100
-;   add x8, x8, x1
-;   add x8, x8, x2
+;   movz x5, #4100
+;   add x5, x5, x1
+;   add x8, x5, x2
 ;   ldr w0, [x8, x0]
 ;   ret
 
@@ -99,8 +99,8 @@ block0:
 }
 
 ; block0:
-;   movz x2, #1234
-;   ldr w0, [x2]
+;   movz x0, #1234
+;   ldr w0, [x0]
 ;   ret
 
 function %f11(i64) -> i32 {
@@ -112,8 +112,8 @@ block0(v0: i64):
 }
 
 ; block0:
-;   add x4, x0, #8388608
-;   ldr w0, [x4]
+;   add x2, x0, #8388608
+;   ldr w0, [x2]
 ;   ret
 
 function %f12(i64) -> i32 {
@@ -125,8 +125,8 @@ block0(v0: i64):
 }
 
 ; block0:
-;   sub x4, x0, #4
-;   ldr w0, [x4]
+;   sub x2, x0, #4
+;   ldr w0, [x2]
 ;   ret
 
 function %f13(i64) -> i32 {
@@ -138,9 +138,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   movz w4, #51712
-;   movk w4, #15258, LSL #16
-;   add x4, x4, x0
+;   movz w3, #51712
+;   movk w3, w3, #15258, LSL #16
+;   add x4, x3, x0
 ;   ldr w0, [x4]
 ;   ret
 
@@ -152,8 +152,8 @@ block0(v0: i32):
 }
 
 ; block0:
-;   sxtw x4, w0
-;   ldr w0, [x4]
+;   sxtw x2, w0
+;   ldr w0, [x2]
 ;   ret
 
 function %f15(i32, i32) -> i32 {
@@ -166,8 +166,8 @@ block0(v0: i32, v1: i32):
 }
 
 ; block0:
-;   sxtw x6, w0
-;   ldr w0, [x6, w1, SXTW]
+;   sxtw x3, w0
+;   ldr w0, [x3, w1, SXTW]
 ;   ret
 
 function %f18(i64, i64, i64) -> i32 {
@@ -179,8 +179,8 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   movn w8, #4097
-;   ldrsh x0, [x8]
+;   movn w4, #4097
+;   ldrsh x0, [x4]
 ;   ret
 
 function %f19(i64, i64, i64) -> i32 {
@@ -192,8 +192,8 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   movz x8, #4098
-;   ldrsh x0, [x8]
+;   movz x4, #4098
+;   ldrsh x0, [x4]
 ;   ret
 
 function %f20(i64, i64, i64) -> i32 {
@@ -205,9 +205,9 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   movn w8, #4097
-;   sxtw x10, w8
-;   ldrsh x0, [x10]
+;   movn w4, #4097
+;   sxtw x6, w4
+;   ldrsh x0, [x6]
 ;   ret
 
 function %f21(i64, i64, i64) -> i32 {
@@ -219,9 +219,9 @@ block0(v0: i64, v1: i64, v2: i64):
 }
 
 ; block0:
-;   movz x8, #4098
-;   sxtw x10, w8
-;   ldrsh x0, [x10]
+;   movz x4, #4098
+;   sxtw x6, w4
+;   ldrsh x0, [x6]
 ;   ret
 
 function %i128(i64) -> i128 {
@@ -232,11 +232,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   mov x8, x0
-;   ldp x3, x1, [x8]
-;   mov x11, x3
-;   stp x11, x1, [x0]
-;   mov x0, x3
+;   mov x5, x0
+;   ldp x0, x1, [x5]
+;   stp x0, x1, [x5]
 ;   ret
 
 function %i128_imm_offset(i64) -> i128 {
@@ -247,11 +245,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   mov x8, x0
-;   ldp x3, x1, [x8, #16]
-;   mov x11, x3
-;   stp x11, x1, [x0, #16]
-;   mov x0, x3
+;   mov x5, x0
+;   ldp x0, x1, [x5, #16]
+;   stp x0, x1, [x5, #16]
 ;   ret
 
 function %i128_imm_offset_large(i64) -> i128 {
@@ -262,11 +258,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   mov x8, x0
-;   ldp x3, x1, [x8, #504]
-;   mov x11, x3
-;   stp x11, x1, [x0, #504]
-;   mov x0, x3
+;   mov x5, x0
+;   ldp x0, x1, [x5, #504]
+;   stp x0, x1, [x5, #504]
 ;   ret
 
 function %i128_imm_offset_negative_large(i64) -> i128 {
@@ -277,11 +271,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   mov x8, x0
-;   ldp x3, x1, [x8, #-512]
-;   mov x11, x3
-;   stp x11, x1, [x0, #-512]
-;   mov x0, x3
+;   mov x5, x0
+;   ldp x0, x1, [x5, #-512]
+;   stp x0, x1, [x5, #-512]
 ;   ret
 
 function %i128_add_offset(i64) -> i128 {
@@ -293,11 +285,9 @@ block0(v0: i64):
 }
 
 ; block0:
-;   mov x8, x0
-;   ldp x3, x1, [x8, #32]
-;   mov x11, x3
-;   stp x11, x1, [x0, #32]
-;   mov x0, x3
+;   mov x5, x0
+;   ldp x0, x1, [x5, #32]
+;   stp x0, x1, [x5, #32]
 ;   ret
 
 function %i128_32bit_sextend_simple(i32) -> i128 {
@@ -309,11 +299,11 @@ block0(v0: i32):
 }
 
 ; block0:
-;   sxtw x8, w0
-;   ldp x4, x1, [x8]
-;   sxtw x9, w0
-;   mov x0, x4
-;   stp x0, x1, [x9]
+;   sxtw x3, w0
+;   mov x8, x0
+;   ldp x0, x1, [x3]
+;   sxtw x4, w8
+;   stp x0, x1, [x4]
 ;   ret
 
 function %i128_32bit_sextend(i64, i32) -> i128 {
@@ -327,13 +317,11 @@ block0(v0: i64, v1: i32):
 }
 
 ; block0:
-;   mov x10, x0
-;   add x10, x10, x1, SXTW
-;   ldp x6, x7, [x10, #24]
-;   add x0, x0, x1, SXTW
-;   mov x15, x6
-;   mov x1, x7
-;   stp x15, x1, [x0, #24]
-;   mov x0, x6
+;   add x4, x0, x1, SXTW
+;   mov x11, x0
+;   mov x9, x1
+;   ldp x0, x1, [x4, #24]
+;   add x5, x11, x9, SXTW
+;   stp x0, x1, [x5, #24]
 ;   ret
 

@@ -19,20 +19,20 @@ block0(v0: i32, v1: r64, v2: i64):
 ;   pushq   %rbp
 ;   movq    %rsp, %rbp
 ; block0:
-;   movl    8(%rdx), %eax
-;   cmpl    %eax, %edi
-;   jb      label1; j label2
-; block1:
-;   movl    %edi, %r8d
-;   movq    0(%rdx), %rcx
-;   movq    %rcx, %rdx
-;   addq    %rdx, %r8, %rdx
-;   cmpl    %eax, %edi
-;   cmovnbq %rcx, %rdx, %rdx
+;   movl    8(%rdx), %r11d
+;   cmpl    %r11d, %edi
+;   jnb     label1; j label2
+; block2:
+;   movl    %edi, %ecx
+;   movq    0(%rdx), %rax
+;   movq    %rax, %rdx
+;   addq    %rdx, %rcx, %rdx
+;   cmpl    %r11d, %edi
+;   cmovnbq %rax, %rdx, %rdx
 ;   movq    %rsi, 0(%rdx)
 ;   movq    %rbp, %rsp
 ;   popq    %rbp
 ;   ret
-; block2:
+; block1:
 ;   ud2 table_oob
 
