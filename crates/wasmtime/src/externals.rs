@@ -284,11 +284,10 @@ impl Global {
                         HeapType::Func => {
                             Val::FuncRef(Func::from_raw(store, definition.as_anyfunc() as usize))
                         }
-                        _ => todo!("Implement HeapType::Bot/Index for get") // TODO(dhil) fixme
+                        _ => todo!("Implement HeapType::Index for get") // TODO(dhil) fixme
                     }
                 }
                 ValType::V128 => Val::V128(*definition.as_u128()),
-                ValType::Bot => todo!("Implement ValType::Bot for get"), // TODO(dhil) fixme: I think this one is trivial.
             }
         }
     }

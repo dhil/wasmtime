@@ -382,6 +382,22 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
         )
     }
 
+    fn translate_call_ref(
+        &mut self,
+        builder: &mut cranelift_frontend::FunctionBuilder,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+    ) -> cranelift_wasm::WasmResult<ir::Inst> {
+        self.inner.translate_call_ref(
+            builder,
+            sig_ref,
+            callee,
+            call_args,
+        )
+    }
+
+
     fn translate_memory_grow(
         &mut self,
         pos: cranelift_codegen::cursor::FuncCursor,

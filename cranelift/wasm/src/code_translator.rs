@@ -94,7 +94,7 @@ use itertools::Itertools;
 use smallvec::SmallVec;
 use std::convert::TryFrom;
 use std::vec::Vec;
-use wasmparser::{FuncValidator, MemArg, Operator, ValType, WasmModuleResources};
+use wasmparser::{FuncValidator, MemArg, Operator, WasmModuleResources};
 
 /// Given a `Reachability<T>`, unwrap the inner `T` or, when unreachable, set
 /// `state.reachable = false` and return.
@@ -126,7 +126,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
     builder: &mut FunctionBuilder,
     state: &mut FuncTranslationState,
     environ: &mut FE,
-    ty: Option<ValType>,
 ) -> WasmResult<()> {
     if !state.reachable {
         translate_unreachable_operator(validator, &op, builder, state, environ)?;
@@ -1149,8 +1148,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::F32Le | Operator::F64Le => {
             translate_fcmp(FloatCC::LessThanOrEqual, builder, state)
         }
-        Operator::RefNull { ty } => {
-            state.push1(environ.translate_ref_null(builder.cursor(), (*ty).into())?)
+        Operator::RefNull { hty } => {
+            state.push1(environ.translate_ref_null(builder.cursor(), (*hty).into())?)
         }
         Operator::RefIsNull => {
             let value = state.pop1();
@@ -2174,7 +2173,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
         // TODO(dhil) fixme: merge into the above list.
         // Function references instructions
-        Operator::ReturnCallRef => {
+        Operator::ReturnCallRef { .. } => {
             return Err(wasm_unsupported!(
                 "proposed tail-call operator for function references {:?}",
                 op
@@ -2184,11 +2183,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let r = state.pop1();
             let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
             let is_null = environ.translate_ref_is_null(builder.cursor(), r)?;
-            canonicalise_then_brnz(builder, is_null, br_destination, inputs);
+            //canonicalise_then_brnz(builder, is_null, br_destination, inputs);
 
             let next_block = builder.create_block();
-            canonicalise_then_jump(builder, next_block, &[]);
+            //canonicalise_then_jump(builder, next_block, &[]);
             builder.seal_block(next_block); // The only predecessor is the current block.
+            canonicalise_brif(builder, is_null, br_destination, inputs, next_block, &[]);
             builder.switch_to_block(next_block);
             state.push1(r);
         }
@@ -2201,26 +2201,24 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // Else: Execute the instruction (br relative_depth).
             let is_null = environ.translate_ref_is_null(builder.cursor(), state.peek1())?;
             let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
-            canonicalise_then_brz(builder, is_null, br_destination, inputs);
+            //canonicalise_then_brz(builder, is_null, br_destination, inputs);
+
+            let next_block = builder.create_block();
+            //canonicalise_then_jump(builder, next_block, &[]);
+            builder.seal_block(next_block); // The only predecessor is the current block.
+            canonicalise_brif(builder, is_null, br_destination, inputs, next_block, &[]);
+
             // In the null case, pop the ref
             state.pop1();
-            let next_block = builder.create_block();
-            canonicalise_then_jump(builder, next_block, &[]);
-            builder.seal_block(next_block); // The only predecessor is the current block.
-
             // The rest of the translation operates on our is null case, which is
             // currently an empty block
             builder.switch_to_block(next_block);
         }
-        Operator::CallRef => {
+        Operator::CallRef { hty } => {
             // Get function signature
-            let index = match ty {
-                None => panic!("expected Some val type"),
-                Some(wasmparser::ValType::Ref(wasmparser::RefType {
-                    heap_type: wasmparser::HeapType::Index(type_idx),
-                    ..
-                })) => type_idx,
-                _ => panic!("unexpected val type"),
+            let index = match hty {
+                wasmparser::HeapType::TypedFunc(type_idx) => <wasmparser::PackedIndex as Into<u32>>::into(*type_idx),
+                _ => panic!("expected TypedFunc"),
             };
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.

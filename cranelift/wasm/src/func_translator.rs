@@ -202,7 +202,6 @@ fn declare_locals<FE: FuncEnvironment + ?Sized>(
             builder.ins().vconst(ir::types::I8X16, constant_handle)
         }
         Ref(rt) => environ.translate_ref_null(builder.cursor(), rt.heap_type.into())?,
-        Bot => panic!("ValType::Bot won't ever actually exist"),
     };
 
     let ty = builder.func.dfg.value_type(zeroval);
@@ -232,13 +231,12 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
 
     environ.before_translate_function(builder, state)?;
     while !reader.eof() {
-        let ty = validator.peek();
         let pos = reader.original_position();
         builder.set_srcloc(cur_srcloc(&reader));
         let op = reader.read_operator()?;
         validator.op(pos, &op)?;
         environ.before_translate_operator(&op, builder, state)?;
-        translate_operator(validator, &op, builder, state, environ, ty)?;
+        translate_operator(validator, &op, builder, state, environ)?;
         environ.after_translate_operator(&op, builder, state)?;
     }
     environ.after_translate_function(builder, state)?;

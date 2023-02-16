@@ -78,7 +78,6 @@ pub fn block_with_params<PE: TargetEnvironment + ?Sized>(
             wasmparser::ValType::V128 => {
                 builder.append_block_param(block, ir::types::I8X16);
             }
-            wasmparser::ValType::Bot => todo!("ValType::Bot will not exist in actual wasmparser"),
         }
     }
     Ok(block)

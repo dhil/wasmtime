@@ -12,7 +12,7 @@ keywords = ["webassembly", "wasm"]
 edition.workspace = true
 
 [dependencies]
-wasmparser = { workspace = true }
+wasmparser = { git = "https://github.com/bytecodealliance/wasm-tools" }
 cranelift-codegen = { workspace = true }
 cranelift-entity = { workspace = true }
 cranelift-frontend = { workspace = true }

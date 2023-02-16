@@ -972,7 +972,6 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                     self.builtin_function_signatures
                         .table_grow_externref(&mut pos.func),
                 ),
-                WasmHeapType::Bot => unreachable!("no bot"),
             };
 
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
@@ -1311,7 +1310,6 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                     self.builtin_function_signatures
                         .table_fill_externref(&mut pos.func),
                 ),
-                WasmHeapType::Bot => unreachable!("no bot"),
             };
 
         let (vmctx, builtin_addr) =
@@ -1335,7 +1333,6 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         Ok(match ht {
             WasmHeapType::Func | WasmHeapType::Index(_) => pos.ins().iconst(self.pointer_type(), 0),
             WasmHeapType::Extern => pos.ins().null(self.reference_type(ht)),
-            WasmHeapType::Bot => panic!("goes away in refactor"),
         })
     }
 
