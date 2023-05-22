@@ -14,7 +14,7 @@ pub use error::*;
 
 /// WebAssembly value type -- equivalent of `wasmparser`'s Type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum WasmType {
+pub enum WasmType<T> {
     /// I32 type
     I32,
     /// I64 type
@@ -26,26 +26,26 @@ pub enum WasmType {
     /// V128 type
     V128,
     /// Reference type
-    Ref(WasmRefType),
+    Ref(WasmRefType<T>),
 }
 
-impl TryFrom<wasmparser::ValType> for WasmType {
+impl<T> TryFrom<wasmparser::ValType> for WasmType<T> {
     type Error = WasmError;
     fn try_from(ty: wasmparser::ValType) -> Result<Self, Self::Error> {
         use wasmparser::ValType::*;
         match ty {
-            I32 => Ok(WasmType::I32),
-            I64 => Ok(WasmType::I64),
-            F32 => Ok(WasmType::F32),
-            F64 => Ok(WasmType::F64),
-            V128 => Ok(WasmType::V128),
-            Ref(rt) => Ok(WasmType::Ref(WasmRefType::from(rt))),
+            I32 => Ok(WasmType::<T>::I32),
+            I64 => Ok(WasmType::<T>::I64),
+            F32 => Ok(WasmType::<T>::F32),
+            F64 => Ok(WasmType::<T>::F64),
+            V128 => Ok(WasmType::<T>::V128),
+            Ref(rt) => Ok(WasmType::<T>::Ref(WasmRefType::<T>::from(rt))),
         }
     }
 }
 
-impl From<WasmType> for wasmparser::ValType {
-    fn from(ty: WasmType) -> wasmparser::ValType {
+impl<T> From<WasmType<T>> for wasmparser::ValType {
+    fn from(ty: WasmType<T>) -> wasmparser::ValType {
         match ty {
             WasmType::I32 => wasmparser::ValType::I32,
             WasmType::I64 => wasmparser::ValType::I64,
@@ -57,64 +57,64 @@ impl From<WasmType> for wasmparser::ValType {
     }
 }
 
-impl fmt::Display for WasmType {
+impl fmt::Display for WasmType<SignatureIndex> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            WasmType::I32 => write!(f, "i32"),
-            WasmType::I64 => write!(f, "i64"),
-            WasmType::F32 => write!(f, "f32"),
-            WasmType::F64 => write!(f, "f64"),
-            WasmType::V128 => write!(f, "v128"),
-            WasmType::Ref(rt) => write!(f, "{}", rt),
+            WasmType::<SignatureIndex>::I32 => write!(f, "i32"),
+            WasmType::<SignatureIndex>::I64 => write!(f, "i64"),
+            WasmType::<SignatureIndex>::F32 => write!(f, "f32"),
+            WasmType::<SignatureIndex>::F64 => write!(f, "f64"),
+            WasmType::<SignatureIndex>::V128 => write!(f, "v128"),
+            WasmType::<SignatureIndex>::Ref(rt) => write!(f, "{}", rt),
         }
     }
 }
 
 /// WebAssembly reference type -- equivalent of `wasmparser`'s RefType
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct WasmRefType {
+pub struct WasmRefType<T> {
     pub nullable: bool,
-    pub heap_type: WasmHeapType,
+    pub heap_type: WasmHeapType<T>,
 }
 
-impl WasmRefType {
-    pub const EXTERNREF: WasmRefType = WasmRefType {
+impl<T> WasmRefType<T> {
+    pub const EXTERNREF: WasmRefType<T> = WasmRefType::<T> {
         nullable: true,
-        heap_type: WasmHeapType::Extern,
+        heap_type: WasmHeapType::<T>::Extern,
     };
-    pub const FUNCREF: WasmRefType = WasmRefType {
+    pub const FUNCREF: WasmRefType<T> = WasmRefType::<T> {
         nullable: true,
-        heap_type: WasmHeapType::Func,
+        heap_type: WasmHeapType::<T>::Func,
     };
 }
 
-impl From<wasmparser::RefType> for WasmRefType {
+impl<T> From<wasmparser::RefType> for WasmRefType<T> {
     fn from(rt: wasmparser::RefType) -> Self {
         WasmRefType {
             nullable: rt.is_nullable(),
-            heap_type: WasmHeapType::from(rt.heap_type()),
+            heap_type: WasmHeapType::<T>::from(rt.heap_type()),
         }
     }
 }
 
-impl From<WasmRefType> for wasmparser::RefType {
+impl<T> From<WasmRefType<T>> for wasmparser::RefType {
     fn from(
-        WasmRefType {
+        WasmRefType::<T> {
             nullable,
             heap_type,
-        }: WasmRefType,
+        }: WasmRefType<T>,
     ) -> wasmparser::RefType {
         wasmparser::RefType::new(nullable, wasmparser::HeapType::from(heap_type)).unwrap()
         // TODO(dhil): Proper error handling
     }
 }
 
-impl fmt::Display for WasmRefType {
+impl fmt::Display for WasmRefType<SignatureIndex> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Self::EXTERNREF => write!(f, "externref"),
             &Self::FUNCREF => write!(f, "funcref"),
-            WasmRefType {
+            WasmRefType::<SignatureIndex> {
                 heap_type,
                 nullable,
             } => {
@@ -130,71 +130,71 @@ impl fmt::Display for WasmRefType {
 
 /// WebAssembly heap type -- equivalent of `wasmparser`'s HeapType
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum WasmHeapType {
+pub enum WasmHeapType<T> {
     Func,
     Extern,
-    Index(u32),
+    Index(T),
 }
 
-impl From<wasmparser::HeapType> for WasmHeapType {
+impl<T> From<wasmparser::HeapType> for WasmHeapType<T> {
     fn from(ht: wasmparser::HeapType) -> Self {
         use wasmparser::HeapType::*;
         match ht {
             Func => WasmHeapType::Func,
             Extern => WasmHeapType::Extern,
-            TypedFunc(i) => WasmHeapType::Index(i.into()),
+            TypedFunc(_) => todo!(),
             _ => unimplemented!(),
         }
     }
 }
 
-impl From<WasmHeapType> for wasmparser::HeapType {
-    fn from(ht: WasmHeapType) -> wasmparser::HeapType {
+impl<T> From<WasmHeapType<T>> for wasmparser::HeapType {
+    fn from(ht: WasmHeapType<T>) -> wasmparser::HeapType {
         match ht {
-            WasmHeapType::Func => wasmparser::HeapType::Func,
-            WasmHeapType::Extern => wasmparser::HeapType::Extern,
-            WasmHeapType::Index(i) => wasmparser::HeapType::TypedFunc(i.try_into().unwrap()),
+            WasmHeapType::<T>::Func => wasmparser::HeapType::Func,
+            WasmHeapType::<T>::Extern => wasmparser::HeapType::Extern,
+            WasmHeapType::<T>::Index(_) => unimplemented!(),
         }
     }
 }
 
-impl fmt::Display for WasmHeapType {
+impl fmt::Display for WasmHeapType<SignatureIndex> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            WasmHeapType::Func => write!(f, "func"),
-            WasmHeapType::Extern => write!(f, "extern"),
-            WasmHeapType::Index(i) => write!(f, "{}", i),
+            WasmHeapType::<SignatureIndex>::Func => write!(f, "func"),
+            WasmHeapType::<SignatureIndex>::Extern => write!(f, "extern"),
+            WasmHeapType::<SignatureIndex>::Index(SignatureIndex(i)) => write!(f, "{}", i),
         }
     }
 }
 
 /// WebAssembly function type -- equivalent of `wasmparser`'s FuncType.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct WasmFuncType {
-    params: Box<[WasmType]>,
+pub struct WasmFuncType<T> {
+    params: Box<[WasmType<T>]>,
     externref_params_count: usize,
-    returns: Box<[WasmType]>,
+    returns: Box<[WasmType<T>]>,
     externref_returns_count: usize,
 }
 
-impl WasmFuncType {
+impl WasmFuncType<SignatureIndex> {
     #[inline]
-    pub fn new(params: Box<[WasmType]>, returns: Box<[WasmType]>) -> Self {
+    pub fn new(params: Box<[WasmType<SignatureIndex>]>, returns: Box<[WasmType<SignatureIndex>]>) -> Self {
         let externref_params_count = params
             .iter()
             .filter(|p| match **p {
-                WasmType::Ref(rt) => rt.heap_type == WasmHeapType::Extern,
+                WasmType::<SignatureIndex>::Ref(rt) => rt.heap_type == WasmHeapType::<SignatureIndex>::Extern,
                 _ => false,
             })
             .count();
         let externref_returns_count = returns
             .iter()
             .filter(|r| match **r {
-                WasmType::Ref(rt) => rt.heap_type == WasmHeapType::Extern,
+                WasmType::<SignatureIndex>::Ref(rt) => rt.heap_type == WasmHeapType::<SignatureIndex>::Extern,
                 _ => false,
             })
             .count();
-        WasmFuncType {
+        WasmFuncType::<SignatureIndex> {
             params,
             externref_params_count,
             returns,
@@ -204,7 +204,7 @@ impl WasmFuncType {
 
     /// Function params types.
     #[inline]
-    pub fn params(&self) -> &[WasmType] {
+    pub fn params(&self) -> &[WasmType<SignatureIndex>] {
         &self.params
     }
 
@@ -216,7 +216,7 @@ impl WasmFuncType {
 
     /// Returns params types.
     #[inline]
-    pub fn returns(&self) -> &[WasmType] {
+    pub fn returns(&self) -> &[WasmType<SignatureIndex>] {
         &self.returns
     }
 
@@ -227,20 +227,20 @@ impl WasmFuncType {
     }
 }
 
-impl TryFrom<wasmparser::FuncType> for WasmFuncType {
+impl TryFrom<wasmparser::FuncType> for WasmFuncType<SignatureIndex> {
     type Error = WasmError;
     fn try_from(ty: wasmparser::FuncType) -> Result<Self, Self::Error> {
         let params = ty
             .params()
             .iter()
             .copied()
-            .map(WasmType::try_from)
+            .map(WasmType::<SignatureIndex>::try_from)
             .collect::<Result<_, Self::Error>>()?;
         let returns = ty
             .results()
             .iter()
             .copied()
-            .map(WasmType::try_from)
+            .map(WasmType::<SignatureIndex>::try_from)
             .collect::<Result<_, Self::Error>>()?;
         Ok(Self::new(params, returns))
     }
@@ -367,13 +367,13 @@ impl From<GlobalIndex> for EntityIndex {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum EntityType {
     /// A global variable with the specified content type
-    Global(Global),
+    Global(Global<SignatureIndex>),
     /// A linear memory with the specified limits
     Memory(Memory),
     /// An event definition.
     Tag(Tag),
     /// A table with the specified element type and limits
-    Table(Table),
+    Table(Table<SignatureIndex>),
     /// A function type where the index points to the type section and records a
     /// function signature.
     Function(SignatureIndex),
@@ -387,9 +387,9 @@ pub enum EntityType {
 /// Wasm `i64` and a `funcref` might be represented with a Cranelift `i64` on
 /// 64-bit architectures, and when GC is not required for func refs.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Global {
+pub struct Global<T> {
     /// The Wasm type of the value stored in the global.
-    pub wasm_ty: crate::WasmType,
+    pub wasm_ty: crate::WasmType<T>,
     /// A flag indicating whether the value may change at runtime.
     pub mutability: bool,
 }
@@ -415,10 +415,10 @@ pub enum GlobalInit {
     RefFunc(FuncIndex),
 }
 
-impl Global {
+impl<T> Global<T> {
     /// Creates a new `Global` type from wasmparser's representation.
-    pub fn new(ty: wasmparser::GlobalType) -> WasmResult<Global> {
-        Ok(Global {
+    pub fn new(ty: wasmparser::GlobalType) -> WasmResult<Global<T>> {
+        Ok(Global::<T> {
             wasm_ty: ty.content_type.try_into()?,
             mutability: ty.mutable,
         })
@@ -427,18 +427,18 @@ impl Global {
 
 /// WebAssembly table.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Table {
+pub struct Table<T> {
     /// The table elements' Wasm type.
-    pub wasm_ty: WasmRefType,
+    pub wasm_ty: WasmRefType<T>,
     /// The minimum number of elements in the table.
     pub minimum: u32,
     /// The maximum number of elements in the table.
     pub maximum: Option<u32>,
 }
 
-impl From<wasmparser::TableType> for Table {
-    fn from(ty: wasmparser::TableType) -> Table {
-        Table {
+impl<T> From<wasmparser::TableType> for Table<T> {
+    fn from(ty: wasmparser::TableType) -> Table<T> {
+        Table::<T> {
             wasm_ty: ty.element_type.into(),
             minimum: ty.initial,
             maximum: ty.maximum,
