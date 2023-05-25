@@ -564,7 +564,7 @@ pub trait FuncEnvironment: TargetEnvironment {
     }
 
     /// TODO(dhil): write documentation.
-    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value>;
+    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value, state: &FuncTranslationState) -> WasmResult<ir::Value>;
 
     /// TODO(dhil): write documentation.
     fn translate_resume(
@@ -572,6 +572,7 @@ pub trait FuncEnvironment: TargetEnvironment {
         pos: FuncCursor,
         cont: ir::Value,
         call_args: &[ir::Value],
+        state: &FuncTranslationState,
     ) -> WasmResult<ir::Value>;
 
     /// TODO(dhil): write documentation.
@@ -580,13 +581,14 @@ pub trait FuncEnvironment: TargetEnvironment {
         pos: FuncCursor,
         tag_index: u32,
         cont: ir::Value,
+        state: &FuncTranslationState,
     ) -> WasmResult<ir::Value>;
 
     /// TODO(dhil): write documentation.
-    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32);
+    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32, state: &FuncTranslationState);
 
     /// TODO
-    fn continuation_arity(&self, type_index: u32) -> usize;
+    fn continuation_arity(&self, type_index: u32, state: &FuncTranslationState) -> usize;
 }
 
 /// An object satisfying the `ModuleEnvironment` trait can be passed as argument to the

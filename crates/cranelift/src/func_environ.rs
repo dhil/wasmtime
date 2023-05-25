@@ -2180,6 +2180,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         func: ir::Value,
+        _state: &FuncTranslationState,
     ) -> WasmResult<ir::Value> {
         let builtin_index = BuiltinFunctionIndex::cont_new();
         let builtin_sig = self.builtin_function_signatures.cont_new(&mut pos.func);
@@ -2197,6 +2198,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         cont: ir::Value,
         _call_args: &[ir::Value],
+        _state: &FuncTranslationState,
     ) -> WasmResult<ir::Value> {
         let builtin_index = BuiltinFunctionIndex::resume();
         let builtin_sig = self.builtin_function_signatures.resume(&mut pos.func);
@@ -2216,6 +2218,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         _pos: FuncCursor,
         _tag_index: u32,
         _cont: ir::Value,
+        _state: &FuncTranslationState,
     ) -> WasmResult<ir::Value> {
         todo!()
     }
@@ -2224,6 +2227,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         tag_index: u32,
+        _state: &FuncTranslationState,
     ) {
         let builtin_index = BuiltinFunctionIndex::suspend();
         let builtin_sig = self.builtin_function_signatures.suspend(&mut pos.func);
@@ -2235,7 +2239,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             .call_indirect(builtin_sig, builtin_addr, &[vmctx, tag_index]);
     }
 
-    fn continuation_arity(&self, index: u32) -> usize {
+    fn continuation_arity(&self, index: u32, _state: &FuncTranslationState) -> usize {
         let idx = self.module.types[TypeIndex::from_u32(index)].unwrap_continuation();
         self.types[idx].params().len()
     }

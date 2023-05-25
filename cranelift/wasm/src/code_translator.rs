@@ -2411,17 +2411,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
         Operator::ContNew { type_index: _ } => {
             let r = state.pop1();
-            state.push1(environ.translate_cont_new(builder.cursor(), r)?);
+            state.push1(environ.translate_cont_new(builder.cursor(), r, state)?);
         }
         Operator::Resume {
             type_index,
             resumetable,
         } => {
-            let _arity = environ.continuation_arity(*type_index);
+            let _arity = environ.continuation_arity(*type_index, state);
             //println!("arity: {}", _arity);
             let call_args = vec![];
             let cont = state.pop1();
-            let jmpn = environ.translate_resume(builder.cursor(), cont, &call_args)?;
+            let jmpn = environ.translate_resume(builder.cursor(), cont, &call_args, state)?;
             // This assumes cont will be modified in-place
             state.push1(cont);
             state.push1(jmpn);
@@ -2463,7 +2463,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             translate_operator(validator, &Operator::Drop, builder, state, environ)?;
         }
         Operator::Suspend { tag_index } => {
-            environ.translate_suspend(builder.cursor(), *tag_index);
+            environ.translate_suspend(builder.cursor(), *tag_index, state);
         }
         Operator::ContBind {
             src_index: _,
