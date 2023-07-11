@@ -23,6 +23,8 @@ use wasmtime_environ::{
 };
 use wasmtime_environ::{FUNCREF_INIT_BIT, FUNCREF_MASK};
 
+use wasmtime_runtime::continuation::USE_CONTOBJ_AS_CONTREF;
+
 macro_rules! declare_function_signatures {
     (
         $(
@@ -2439,9 +2441,14 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         contref: ir::Value,
     ) -> ir::Value {
-        let (_vmctx, contobj) =
-            generate_builtin_call!(self, builder, cont_ref_get_cont_obj, [contref]);
-        return contobj;
+        if USE_CONTOBJ_AS_CONTREF {
+            // The "contref" is a contobj already
+            return contref;
+        } else {
+            let (_vmctx, contobj) =
+                generate_builtin_call!(self, builder, cont_ref_get_cont_obj, [contref]);
+            return contobj;
+        }
     }
 
     /// TODO
@@ -2550,8 +2557,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         contobj_addr: ir::Value,
     ) -> ir::Value {
-        let (_vmctx, contref) = generate_builtin_call!(self, builder, new_cont_ref, [contobj_addr]);
-        return contref;
+        if USE_CONTOBJ_AS_CONTREF {
+            return contobj_addr;
+        } else {
+            let (_vmctx, contref) =
+                generate_builtin_call!(self, builder, new_cont_ref, [contobj_addr]);
+            return contref;
+        }
     }
 
     fn typed_continuations_load_return_values(
