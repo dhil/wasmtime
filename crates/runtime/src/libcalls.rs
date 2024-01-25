@@ -774,3 +774,47 @@ pub mod relocs {
         }
     }
 }
+
+/// NOTE(dhil): This libcall captures the essence of the magic sauce
+/// of the WasmFX runtime.
+pub fn on_fiber(instance: &mut Instance, fptr: *mut u8) {
+    use crate::{VMOpaqueContext, ValRaw};
+    use wasmtime_fiber::{Fiber, FiberStack, Suspend};
+
+    // Cast the function pointer, get callee and caller contexts.
+    let func_ref = unsafe { (fptr as *mut VMFuncRef).as_ref().unwrap() };
+    let callee_vmctx = func_ref.vmctx;
+    let caller_vmctx = VMOpaqueContext::from_vmcontext(instance.vmctx());
+
+    // Get the trampoline, setup arguments buffer (we assume no
+    // arguments in this minimal runtime).
+    let f = func_ref.array_call;
+    let mut args = vec![];
+    let args_ptr = args.as_mut_ptr();
+
+    // Allocate a (suspended) fiber to run the `f` trampoline on.
+    let fiber = Fiber::new(
+        FiberStack::new(4096).unwrap(),
+        move |_first_val: (), _suspend: &Suspend<(), (), ()>| unsafe {
+            // Call the trampoline.
+            f(callee_vmctx, caller_vmctx, args_ptr as *mut ValRaw, 0)
+        },
+    );
+
+    // Reset the stack limit, otherwise the new fiber may erroneously
+    // report a stack overflow.
+    unsafe {
+        (*(*(*instance.store()).vmruntime_limits())
+            .stack_limit
+            .get_mut()) = 0
+    };
+
+    // Start the fiber, i.e. run the trampoline `f`.
+    match fiber
+        .expect("we assumed the allocation succeeded")
+        .resume(())
+    {
+        Ok(()) => println!("Fiber returned OK"),
+        Err(err) => println!("Fiber returned Err: {:?}", err),
+    }
+}

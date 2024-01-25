@@ -2474,6 +2474,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.switch_to_block(else_block);
         }
         Operator::CallRef { type_index } => {
+            println!("WARNING: You are compiling using the minimal runtime repro for issue https://github.com/wasmfx/wasmfxtime/issues/61 which deliberately alters the behaviour of `call_ref`");
+
             // Get function signature
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
@@ -2488,6 +2490,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
 
             let inst_results = builder.inst_results(call);
+
             debug_assert_eq!(
                 inst_results.len(),
                 builder.func.dfg.signatures[sigref].returns.len(),

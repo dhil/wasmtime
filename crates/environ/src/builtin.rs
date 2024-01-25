@@ -67,6 +67,9 @@ macro_rules! foreach_builtin_function {
             update_stack_pointer(vmctx: vmctx, value: i32);
             /// Invoked before memory.grow is called.
             update_mem_size(vmctx: vmctx, num_bytes: i32);
+
+            /// Launches a function a separate fiber (stack).
+            on_fiber(vmctx: vmctx, fptr: pointer);
         }
     };
 }

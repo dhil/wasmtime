@@ -2126,11 +2126,26 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_call_ref(
         &mut self,
         builder: &mut FunctionBuilder,
-        sig_ref: ir::SigRef,
+        _sig_ref: ir::SigRef,
         callee: ir::Value,
-        call_args: &[ir::Value],
+        _call_args: &[ir::Value],
     ) -> WasmResult<ir::Inst> {
-        Call::new(builder, self).call_ref(sig_ref, callee, call_args)
+        // NOTE(dhil): The translation of `call_ref` has deliberately
+        // been modified for the purpose of debugging issue #61.
+        let (vmctx, on_fiber_addr) = self.translate_load_builtin_function_address(
+            &mut builder.cursor(),
+            BuiltinFunctionIndex::on_fiber(),
+        );
+
+        let on_fiber_sig = self
+            .builtin_function_signatures
+            .on_fiber(&mut builder.cursor().func);
+
+        let call_inst = builder
+            .ins()
+            .call_indirect(on_fiber_sig, on_fiber_addr, &[vmctx, callee]);
+
+        Ok(call_inst)
     }
 
     fn translate_return_call(
