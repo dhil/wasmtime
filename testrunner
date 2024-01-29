@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+tests=(
+"wast::Cranelift::misc::typed_continuations::cont_args"
+"wast::Cranelift::misc::typed_continuations::cont_bind1"
+"wast::Cranelift::misc::typed_continuations::cont_bind2"
+"wast::Cranelift::misc::typed_continuations::cont_bind3"
+"wast::Cranelift::misc::typed_continuations::cont_bind4"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding1"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding2"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding3"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding4"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding5"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding6"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding7"
+"wast::Cranelift::misc::typed_continuations::cont_forwarding8"
+"wast::Cranelift::misc::typed_continuations::cont_nary"
+"wast::Cranelift::misc::typed_continuations::cont_nested1"
+"wast::Cranelift::misc::typed_continuations::cont_nested2"
+"wast::Cranelift::misc::typed_continuations::cont_nested3"
+"wast::Cranelift::misc::typed_continuations::cont_nested4"
+"wast::Cranelift::misc::typed_continuations::cont_nested5"
+"wast::Cranelift::misc::typed_continuations::cont_nested6"
+"wast::Cranelift::misc::typed_continuations::cont_new"
+"wast::Cranelift::misc::typed_continuations::cont_resume"
+"wast::Cranelift::misc::typed_continuations::cont_resume1"
+"wast::Cranelift::misc::typed_continuations::cont_resume2"
+"wast::Cranelift::misc::typed_continuations::cont_resume3"
+"wast::Cranelift::misc::typed_continuations::cont_resume"
+"wast::Cranelift::misc::typed_continuations::cont_resume_return"
+"wast::Cranelift::misc::typed_continuations::cont_return"
+"wast::Cranelift::misc::typed_continuations::cont_suspend"
+"wast::Cranelift::misc::typed_continuations::dup"
+"wast::Cranelift::misc::typed_continuations::unhandled")
+
+for i in "${tests[@]}" ; do
+    echo "$i"
+    target/debug/deps/all-c6eb0f1f9fe5410f --exact "$i" || exit 1
+done

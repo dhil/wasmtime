@@ -782,14 +782,8 @@ fn tc_cont_new(
     func: *mut u8,
     param_count: u64,
     result_count: u64,
-) -> *mut u8 {
-    match crate::continuation::cont_new(instance, func, param_count as usize, result_count as usize)
-    {
-        Ok(ptr) => ptr as *mut u8,
-        Err(_) => panic!("cont_new failed!"),
-        // TODO(dhil): I see sporadic crashes if I change the return
-        // type to be Result<*mut u8, TrapReason>.
-    }
+) -> Result<*mut u8, TrapReason> {
+   Ok(crate::continuation::cont_new(instance, func, param_count as usize, result_count as usize)? as *mut u8)
 }
 
 fn tc_resume(instance: &mut Instance, contobj: *mut u8) -> Result<u32, TrapReason> {
