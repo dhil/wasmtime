@@ -32,6 +32,8 @@ mod pooling;
 #[cfg(feature = "pooling-allocator")]
 pub use self::pooling::{InstanceLimits, PoolingInstanceAllocator, PoolingInstanceAllocatorConfig};
 
+pub mod wasmfx_allocator;
+
 /// Represents a request for a new runtime instance.
 pub struct InstanceAllocationRequest<'a> {
     /// The info related to the compiled version of this module,

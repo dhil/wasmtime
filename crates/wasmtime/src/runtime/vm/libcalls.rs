@@ -842,7 +842,7 @@ fn tc_cont_new(
     result_count: u32,
 ) -> Result<*mut u8, TrapReason> {
     let ans =
-        crate::runtime::vm::continuation::cont_new(instance, func, param_count, result_count)?;
+        crate::vm::continuation::optimized::cont_new(instance, func, param_count, result_count)?;
     Ok(ans.cast::<u8>())
 }
 
@@ -851,21 +851,21 @@ fn tc_resume(
     contref: *mut u8,
     parent_stack_limits: *mut u8,
 ) -> Result<u64, TrapReason> {
-    crate::runtime::vm::continuation::resume(
+    crate::vm::continuation::optimized::resume(
         instance,
-        contref.cast::<crate::runtime::vm::continuation::VMContRef>(),
-        parent_stack_limits.cast::<crate::runtime::vm::continuation::StackLimits>(),
+        contref.cast::<crate::vm::continuation::optimized::VMContRef>(),
+        parent_stack_limits.cast::<crate::vm::continuation::optimized::StackLimits>(),
     )
     .map(|reason| reason.into())
 }
 
 fn tc_suspend(instance: &mut Instance, tag_index: u32) -> Result<(), TrapReason> {
-    crate::runtime::vm::continuation::suspend(instance, tag_index)
+    crate::vm::continuation::optimized::suspend(instance, tag_index)
 }
 
 fn tc_new_cont_obj(_instance: &mut Instance, contref: *mut u8) -> *mut u8 {
-    crate::runtime::vm::continuation::new_cont_obj(
-        contref.cast::<crate::runtime::vm::continuation::VMContRef>(),
+    crate::vm::continuation::optimized::new_cont_obj(
+        contref.cast::<crate::vm::continuation::optimized::VMContRef>(),
     )
     .cast::<u8>()
 }
@@ -874,8 +874,8 @@ fn tc_cont_obj_get_cont_ref(
     _instance: &mut Instance,
     contobj: *mut u8,
 ) -> Result<*mut u8, TrapReason> {
-    let ans = crate::runtime::vm::continuation::cont_obj_get_cont_ref(
-        contobj.cast::<crate::runtime::vm::continuation::VMContObj>(),
+    let ans = crate::vm::continuation::optimized::cont_obj_get_cont_ref(
+        contobj.cast::<crate::vm::continuation::optimized::VMContObj>(),
     )?;
     Ok(ans.cast::<u8>())
 }
@@ -885,15 +885,16 @@ fn tc_cont_ref_forward_tag_return_values_buffer(
     parent_contref: *mut u8,
     child_contref: *mut u8,
 ) -> Result<(), TrapReason> {
-    crate::runtime::vm::continuation::cont_ref_forward_tag_return_values_buffer(
-        parent_contref.cast::<crate::runtime::vm::continuation::VMContRef>(),
-        child_contref.cast::<crate::runtime::vm::continuation::VMContRef>(),
+    crate::vm::continuation::optimized::cont_ref_forward_tag_return_values_buffer(
+        parent_contref.cast::<crate::vm::continuation::optimized::VMContRef>(),
+        child_contref.cast::<crate::vm::continuation::optimized::VMContRef>(),
     )
 }
 
-fn tc_drop_cont_ref(_instance: &mut Instance, contref: *mut u8) {
-    crate::runtime::vm::continuation::drop_cont_ref(
-        contref.cast::<crate::runtime::vm::continuation::VMContRef>(),
+fn tc_drop_cont_ref(instance: &mut Instance, contref: *mut u8) {
+    crate::vm::continuation::optimized::drop_cont_ref(
+        instance,
+        contref.cast::<crate::vm::continuation::optimized::VMContRef>(),
     )
 }
 

@@ -5,7 +5,7 @@
 
 use alloc::sync::Arc;
 use anyhow::{Error, Result};
-use continuation::StackChainCell;
+use continuation::optimized::StackChainCell;
 use core::fmt;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};

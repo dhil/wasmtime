@@ -415,6 +415,11 @@ typed_continuations_baseline_implementation = [
   "wasmtime/typed_continuations_baseline_implementation"
 ]
 
+# Toggle the WasmFX pooling allocator
+wasmfx_pooling_allocator = [
+  "wasmtime/wasmfx_pooling_allocator"
+]
+
 # CLI subcommands for the `wasmtime` executable. See `wasmtime $cmd --help`
 # for more information on each subcommand.
 serve = ["wasi-http", "component-model", "dep:http-body-util", "dep:http"]

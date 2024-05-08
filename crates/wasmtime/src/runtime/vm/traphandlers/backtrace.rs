@@ -23,7 +23,7 @@
 
 use crate::prelude::*;
 use crate::runtime::vm::arch;
-use crate::runtime::vm::continuation::StackChain;
+use crate::runtime::vm::continuation::optimized::StackChain;
 use crate::runtime::vm::{
     traphandlers::{tls, CallThreadState},
     VMRuntimeLimits,

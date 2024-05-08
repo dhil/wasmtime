@@ -271,3 +271,6 @@ unsafe_disable_continuation_linearity_check = []
 
 # Toggle the baseline implementation of WasmFX
 typed_continuations_baseline_implementation = ["async"]
+
+# Toggle the WasmFX stack pooling allocator
+wasmfx_pooling_allocator = []
