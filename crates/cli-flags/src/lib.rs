@@ -279,6 +279,8 @@ wasmtime_option_group! {
         pub typed_continuations: Option<bool>,
         /// Configure support for the GC proposal.
         pub gc: Option<bool>,
+        /// Configure support for WasmFX.
+        pub wasmfx: Option<bool>,
     }
 
     enum Wasm {
@@ -686,11 +688,14 @@ impl CommonOptions {
         if let Some(enable) = self.wasm.memory64.or(all) {
             config.wasm_memory64(enable);
         }
-        if let Some(enable) = self.wasm.exceptions {
+        if let Some(enable) = self.wasm.exceptions.or(all) {
             config.wasm_exceptions(enable);
         }
-        if let Some(enable) = self.wasm.typed_continuations {
+        if let Some(enable) = self.wasm.typed_continuations.or(all) {
             config.wasm_typed_continuations(enable);
+        }
+        if let Some(enable) = self.wasm.wasmfx.or(all) {
+            config.wasm_wasmfx(enable);
         }
 
         macro_rules! handle_conditionally_compiled {

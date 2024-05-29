@@ -151,6 +151,13 @@ pub extern "C" fn wasmtime_config_wasm_typed_continuations_set(
 }
 
 #[no_mangle]
+pub extern "C" fn wasmtime_config_wasm_wasmfx_set(c: &mut wasm_config_t, enable: bool) {
+    c.config.wasm_exceptions(enable);
+    c.config.wasm_function_references(enable);
+    c.config.wasm_typed_continuations(enable);
+}
+
+#[no_mangle]
 #[cfg(any(feature = "cranelift", feature = "winch"))]
 pub extern "C" fn wasmtime_config_strategy_set(
     c: &mut wasm_config_t,

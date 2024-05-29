@@ -1015,6 +1015,24 @@ impl Config {
         self
     }
 
+    /// Configures whether the WebAssembly typed-continuations
+    /// [proposal] will be enabled for compilation.
+    ///
+    /// Note that this feature is a work-in-progress and is incomplete.
+    ///
+    /// This is `false` by default.
+    ///
+    /// [proposal]: https://github.com/effect-handlers/wasm-spec
+    pub fn wasm_wasmfx(&mut self, enable: bool) -> &mut Self {
+        if !enable {
+            self.wasm_typed_continuations(enable)
+        } else {
+            self.wasm_exceptions(enable)
+                .wasm_function_references(enable)
+                .wasm_typed_continuations(enable)
+        }
+    }
+
     /// Configures whether we enable the "indirect call cache" optimization.
     ///
     /// This feature adds, for each `call_indirect` instruction in a
@@ -1829,6 +1847,16 @@ impl Config {
             && !self.features.contains(WasmFeatures::FUNCTION_REFERENCES)
         {
             bail!("feature 'gc' requires 'function_references' to be enabled");
+        }
+        if self.features.contains(WasmFeatures::TYPED_CONTINUATIONS)
+            && !self.features.contains(WasmFeatures::FUNCTION_REFERENCES)
+        {
+            bail!("feature 'typed_continuations' requires 'function_references' to be enabled")
+        }
+        if self.features.contains(WasmFeatures::TYPED_CONTINUATIONS)
+            && !self.features.contains(WasmFeatures::EXCEPTIONS)
+        {
+            bail!("feature 'typed_continuations' requires 'exceptions' to be enabled")
         }
         #[cfg(feature = "async")]
         if self.async_support && self.max_wasm_stack > self.async_stack_size {
