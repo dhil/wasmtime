@@ -2923,11 +2923,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_suspend(
         &mut self,
         builder: &mut FunctionBuilder,
-        tag_index: ir::Value,
+        tag_index: u32,
         suspend_args: &[ir::Value],
         tag_return_types: &[WasmValType],
     ) -> Vec<ir::Value> {
-        wasmfx_impl::translate_suspend(self, builder, tag_index, suspend_args, tag_return_types)
+        let tag_index_val = builder.ins().iconst(I32, tag_index as i64);
+        wasmfx_impl::translate_suspend(self, builder, tag_index_val, suspend_args, tag_return_types)
     }
 
     fn continuation_arguments(&self, index: u32) -> &[WasmValType] {
@@ -2946,12 +2947,16 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
     fn tag_params(&self, tag_index: u32) -> &[WasmValType] {
         let idx = self.module.tags[TagIndex::from_u32(tag_index)].signature;
-        self.types[idx].unwrap_func().params()
+        self.types[idx.unwrap_module_type_index()]
+            .unwrap_func()
+            .params()
     }
 
     fn tag_returns(&self, tag_index: u32) -> &[WasmValType] {
         let idx = self.module.tags[TagIndex::from_u32(tag_index)].signature;
-        self.types[idx].unwrap_func().returns()
+        self.types[idx.unwrap_module_type_index()]
+            .unwrap_func()
+            .returns()
     }
 
     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {
