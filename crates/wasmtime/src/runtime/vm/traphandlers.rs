@@ -25,7 +25,7 @@ use core::cell::Cell;
 use core::ops::Range;
 use core::ptr::{self, NonNull};
 
-pub use self::backtrace::Backtrace;
+pub use self::backtrace::{Backtrace, Frame};
 pub use self::coredump::CoreDumpStack;
 pub use self::tls::{tls_eager_initialize, AsyncWasmCallState, PreviousAsyncWasmCallState};
 

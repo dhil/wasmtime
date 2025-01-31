@@ -2871,9 +2871,23 @@ pub fn translate_operator(
             argument_index,
             result_index,
         } => {
-            let src_arity = environ.continuation_arguments(*argument_index).len();
+            let src_types = environ.continuation_arguments(*argument_index);
             let dst_arity = environ.continuation_arguments(*result_index).len();
-            let arg_count = src_arity - dst_arity;
+            let arg_count = src_types.len() - dst_arity;
+
+            let arg_types = &src_types[0..arg_count];
+            for arg_type in arg_types {
+                // We can't bind GC objects using cont.bind at the moment: We
+                // don't have the necessary infrastructure to traverse the
+                // buffers used by cont.bind when looking for GC roots. Thus,
+                // this crude check ensures that these buffers can never contain
+                // GC roots to begin with.
+                if arg_type.is_vmgcref_type_and_not_i31() {
+                    return Err(wasmtime_environ::WasmError::Unsupported(
+                        "cont.bind does not support GC types at the moment".into(),
+                    ));
+                }
+            }
 
             let (original_contobj, args) = state.peekn(arg_count + 1).split_last().unwrap();
 

@@ -28,7 +28,9 @@ use crate::runtime::vm::{
     traphandlers::{tls, CallThreadState},
     Unwind, VMRuntimeLimits,
 };
+use crate::vm::stack_switching::VMContRef;
 use core::ops::ControlFlow;
+use wasmtime_environ::stack_switching::State;
 
 /// A WebAssembly stack trace.
 #[derive(Debug)]
@@ -96,6 +98,37 @@ impl Backtrace {
             Some(state) => unsafe { Self::trace_with_trap_state(limits, unwind, state, None, f) },
             None => {}
         });
+    }
+
+    // Walk the stack of the given continuation, which must be suspended, and
+    // all of its parent continuations (if any).
+    pub fn trace_suspended_continuation(
+        store: &StoreOpaque,
+        continuation: &VMContRef,
+        f: impl FnMut(Frame) -> ControlFlow<()>,
+    ) {
+        assert_eq!(
+            continuation.common_stack_information.state,
+            State::Suspended
+        );
+
+        let unwind = store.unwinder();
+
+        let pc = continuation.stack.control_context_instruction_pointer();
+        let fp = continuation.stack.control_context_frame_pointer();
+        let trampoline_fp = continuation
+            .common_stack_information
+            .limits
+            .last_wasm_entry_fp;
+
+        unsafe {
+            // FIXME(frank-emrich) Casting from *const to *mut pointer is
+            // terrible, but we won't actually modify any of the continuations
+            // here.
+            let stack_chain =
+                StackChain::Continuation(continuation as *const VMContRef as *mut VMContRef);
+            Self::trace_through_continuations(unwind, stack_chain, pc, fp, trampoline_fp, f);
+        }
     }
 
     /// Walk the current Wasm stack, calling `f` for each frame we walk.
@@ -180,7 +213,7 @@ impl Backtrace {
         log::trace!("====== Done Capturing Backtrace (reached end of activations) ======");
     }
 
-    /// Traces through a sequence of stacks, creating a backtracr for each one,
+    /// Traces through a sequence of stacks, creating a backtrace for each one,
     /// beginning at the given `pc` and `fp`.
     ///
     /// If `chain` is `InitialStack`, we are tracing through the initial stack,
@@ -193,7 +226,7 @@ impl Backtrace {
         chain: StackChain,
         pc: usize,
         fp: usize,
-        trampoline_sp: usize,
+        trampoline_fp: usize,
         mut f: impl FnMut(Frame) -> ControlFlow<()>,
     ) -> ControlFlow<()> {
         use crate::runtime::vm::stack_switching::VMContRef;
@@ -201,7 +234,7 @@ impl Backtrace {
 
         // Handle the stack that is currently running (which may be a
         // continuation or the initial stack).
-        Self::trace_through_wasm(unwind, pc, fp, trampoline_sp, &mut f)?;
+        Self::trace_through_wasm(unwind, pc, fp, trampoline_fp, &mut f)?;
 
         // Note that the rest of this function has no effect if `chain` is
         // `Some(StackChain::InitialStack(_))` (i.e., there is only one stack to
