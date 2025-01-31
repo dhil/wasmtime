@@ -5,7 +5,7 @@ use core::{
     marker::{Send, Sync},
 };
 
-/// TODO
+/// FIXME(frank-emrich) Will remove in the final upstreamed version
 #[allow(dead_code, reason = "Only accessed in debug builds")]
 pub const ENABLE_DEBUG_PRINTING: bool = false;
 
@@ -46,9 +46,9 @@ impl Default for StackSwitchingConfig {
 #[repr(C)]
 #[derive(Debug, Default, Clone)]
 pub struct StackLimits {
-    /// TODO(dhil): Write documentation.
+    /// Saved version of `stack_limit` field of `VMRuntimeLimits`
     pub stack_limit: usize,
-    /// TODO(dhil): Write documentation.
+    /// Saved version of `last_wasm_entry_fp` field of `VMRuntimeLimits`
     pub last_wasm_entry_fp: usize,
 }
 
@@ -57,7 +57,8 @@ pub struct StackLimits {
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CommonStackInformation {
-    /// TODO(dhil): Write documentation.
+    /// Saves subset of `VMRuntimeLimits` for this stack. See documentation of
+    /// `StackChain` for the exact uses.
     pub limits: StackLimits,
     /// For the initial stack, this field must only have one of the following values:
     /// - Running
@@ -98,7 +99,7 @@ pub struct CommonStackInformation {
 }
 
 impl CommonStackInformation {
-    /// TODO(dhil): Write documentation.
+    /// Default value with state set to `Running`
     pub fn running_default() -> Self {
         Self {
             limits: StackLimits::default(),
@@ -110,7 +111,7 @@ impl CommonStackInformation {
 }
 
 impl StackLimits {
-    /// TODO(dhil): Write documentation.
+    /// Default value, but uses the given value for `stack_limit`.
     pub fn with_stack_limit(stack_limit: usize) -> Self {
         Self {
             stack_limit,
@@ -205,7 +206,7 @@ pub enum State {
 }
 
 impl State {
-    /// TODO(dhil): Write documentation.
+    /// Returns i32 discriminant of this variant.
     pub fn discriminant(&self) -> i32 {
         // This is well-defined for an enum with repr(i32).
         unsafe { *(self as *const Self as *const i32) }
@@ -256,29 +257,29 @@ pub mod offsets {
         pub const REVISION: usize = VALUES + core::mem::size_of::<Payloads>();
     }
 
-    /// TODO(dhil): Write documentation.
+    /// Offsets of fields in `StackLimits` struct.
     pub mod stack_limits {
         use crate::stack_switching::*;
         use memoffset::offset_of;
 
-        /// TODO(dhil): Write documentation.
+        /// Offset of `stack_limit` field
         pub const STACK_LIMIT: usize = offset_of!(StackLimits, stack_limit);
-        /// TODO(dhil): Write documentation.
+        /// Offset of `last_wasm_entry_fp` field
         pub const LAST_WASM_ENTRY_FP: usize = offset_of!(StackLimits, last_wasm_entry_fp);
     }
 
-    /// TODO(dhil): Write documentation.
+    /// Offsets of fields in `CommonStackInformation` struct.
     pub mod common_stack_information {
         use crate::stack_switching::*;
         use memoffset::offset_of;
 
-        /// TODO(dhil): Write documentation.
+        /// Offset of `limits` field
         pub const LIMITS: usize = offset_of!(CommonStackInformation, limits);
-        /// TODO(dhil): Write documentation.
+        /// Offset of `state` field
         pub const STATE: usize = offset_of!(CommonStackInformation, state);
-        /// TODO(dhil): Write documentation.
+        /// Offset of `handlers` field
         pub const HANDLERS: usize = offset_of!(CommonStackInformation, handlers);
-        /// TODO(dhil): Write documentation.
+        /// Offset of `first_switch_handler_index` field
         pub const FIRST_SWITCH_HANDLER_INDEX: usize =
             offset_of!(CommonStackInformation, first_switch_handler_index);
     }
@@ -305,27 +306,29 @@ pub const CONTROL_EFFECT_SUSPEND_DISCRIMINANT: u32 = 2;
 /// `ControlEffect`.
 pub const CONTROL_EFFECT_SWITCH_DISCRIMINANT: u32 = 3;
 
-/// Universal control effect. This structure encodes return signal,
-/// resume signal, suspension signal, and the handler to suspend to in a single variant type.
-/// This instance is used at runtime. There is a codegen
-/// counterpart in `cranelift/src/stack-switching/control_effect.rs`.
+/// Universal control effect. This structure encodes return signal, resume
+/// signal, suspension signal, and the handler to suspend to in a single variant
+/// type. This instance is used at runtime. There is a codegen counterpart in
+/// `cranelift/src/stack-switching/control_effect.rs`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
 pub enum ControlEffect {
-    /// TODO(dhil): Write documentation.
+    /// Used to signal that a continuation has returned and control switches
+    /// back to the parent.
     Return = CONTROL_EFFECT_RETURN_DISCRIMINANT,
-    /// TODO(dhil): Write documentation.
+    /// Used to signal to a continuation that it is being resumed.
     Resume = CONTROL_EFFECT_RESUME_DISCRIMINANT,
-    /// TODO(dhil): Write documentation.
+    /// Used to signal that a continuation has invoked a `suspend` instruction.
     Suspend {
-        /// TODO(dhil): Write documentation.
+        /// The index of the handler to be used in the parent continuation to
+        /// switch back to.
         handler_index: u32,
     } = CONTROL_EFFECT_SUSPEND_DISCRIMINANT,
-    /// TODO(dhil): Write documentation.
+    /// Used to signal that a continuation has invoked a `suspend` instruction.
     Switch = CONTROL_EFFECT_SWITCH_DISCRIMINANT,
 }
 
-// TODO(frank-emrich) This conversion assumes little-endian data layout.
+// FIXME(frank-emrich) This conversion assumes little-endian data layout.
 // We convert to and from u64 as follows: The 4 LSBs of the u64 are the
 // discriminant, the 4 MSBs are the handler_index (if `Suspend`)
 impl From<u64> for ControlEffect {
@@ -334,7 +337,7 @@ impl From<u64> for ControlEffect {
     }
 }
 
-// TODO(frank-emrich) This conversion assumes little-endian data layout.
+// FIXME(frank-emrich) This conversion assumes little-endian data layout.
 // We convert to and from u64 as follows: The 4 LSBs of the u64 are the
 // discriminant, the 4 MSBs are the handler_index (if `Suspend`)
 impl From<ControlEffect> for u64 {

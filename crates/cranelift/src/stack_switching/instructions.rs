@@ -55,6 +55,13 @@ pub(crate) mod stack_switching_helpers {
     // or outside of this module.
     use crate::stack_switching::instructions::stack_switching_helpers as helpers;
 
+    /// FIXME(frank-emrich) This printing functionality is inherently unsafe: It
+    /// hard-codes the addresses of the string literals it uses, without any
+    /// relocation information. Therefore, it will immediately crash and burn if
+    /// the compiled code is ever used in a different execution of wasmtime than
+    /// the one producing it.
+    /// As a result It is nor supposed to be part of the final, upstreamed code.
+    ///
     /// Low-level implementation of debug printing. Do not use directly; see
     /// `emit_debug_println!` macro for doing actual printing.
     ///
