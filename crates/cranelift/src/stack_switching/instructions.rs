@@ -2070,14 +2070,6 @@ pub(crate) fn translate_resume<'a>(
         let return_values = payloads.load_data_entries(env, builder, &return_types);
         payloads.clear(env, builder, true);
 
-        // The continuation has returned and all `VMContObjs` to it
-        // should have been be invalidated. We may safely deallocate
-        // it. NOTE(dhil): it is only safe to deallocate the stack
-        // object if there are no lingering references to it,
-        // otherwise we have to keep it alive (though it can be
-        // repurposed).
-        call_builtin!(builder, env, cont_ref_drop(returned_contref.address));
-
         Ok(return_values)
     }
 }

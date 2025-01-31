@@ -39,8 +39,6 @@ use wasmtime_wmemcheck::Wmemcheck;
 mod allocator;
 pub use allocator::*;
 
-use allocator::stacks_allocator::StacksAllocator;
-
 /// The pair of an instance and a raw pointer its associated store.
 ///
 /// ### Safety
@@ -284,9 +282,6 @@ pub struct Instance {
     #[cfg(feature = "wmemcheck")]
     pub(crate) wmemcheck_state: Option<Wmemcheck>,
 
-    /// Stacks allocator
-    stacks_allocator: Option<Box<StacksAllocator>>,
-
     /// Additional context used by compiled wasm code. This field is last, and
     /// represents a dynamically-sized array that extends beyond the nominal
     /// end of the struct (similar to a flexible array member).
@@ -327,7 +322,6 @@ impl Instance {
                 tables,
                 dropped_elements,
                 dropped_data,
-                stacks_allocator: None,
                 host_state: req.host_state,
                 vmctx_self_reference: SendSyncPtr::new(NonNull::new(ptr.add(1).cast()).unwrap()),
                 vmctx: VMContext {
@@ -1501,39 +1495,6 @@ impl Instance {
                 self.vmctx_plus_offset_mut(self.offsets().vmctx_stack_switching_stack_chain());
             *ptr = chain;
         }
-    }
-
-    // TODO
-    pub(crate) fn stack_switching_allocate_continuation(
-        &mut self,
-    ) -> Result<
-        (
-            *mut stacks_allocator::VMContRef,
-            stacks_allocator::ContinuationStack,
-        ),
-        Error,
-    > {
-        match &mut self.stacks_allocator {
-            Some(allocator) => allocator.allocate(),
-            None => unsafe {
-                InstanceAndStore::from_vmctx(
-                    (&mut self.vmctx) as *mut VMContext,
-                    |i| -> Result<_, Error> {
-                        let (_, store) = i.unpack_mut();
-                        let config = &store.engine().config().stack_switching_config;
-                        self.stacks_allocator = Some(Box::new(StacksAllocator::new(config)?));
-                        self.stacks_allocator.as_mut().unwrap().allocate()
-                    },
-                )
-            },
-        }
-    }
-
-    pub(crate) fn stack_switching_deallocate_continuation(
-        &mut self,
-        contref: *mut stacks_allocator::VMContRef,
-    ) {
-        self.stacks_allocator.as_mut().unwrap().deallocate(contref)
     }
 }
 

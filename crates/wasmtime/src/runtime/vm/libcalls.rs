@@ -1435,13 +1435,6 @@ fn cont_new(
     Ok(Some(AllocationSize(ans.cast::<u8>() as usize)))
 }
 
-fn cont_ref_drop(_store: &mut dyn VMStore, instance: &mut Instance, contref: *mut u8) {
-    crate::vm::stack_switching::imp::drop_cont_ref(
-        instance,
-        contref.cast::<crate::vm::stack_switching::imp::VMContRef>(),
-    );
-}
-
 fn tc_print_str(_store: &mut dyn VMStore, _instance: &mut Instance, s: *const u8, len: u64) {
     let len =
         usize::try_from(len).map_err(|_error| TrapReason::User(anyhow::anyhow!("len too large!")));

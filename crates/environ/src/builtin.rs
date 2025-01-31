@@ -208,8 +208,6 @@ macro_rules! foreach_builtin_function {
 
             // Creates a new continuation from a funcref.
             cont_new(vmctx: vmctx, r: pointer, param_count: i32, result_count: i32) -> pointer;
-            // Drops a continuation reference.
-            cont_ref_drop(vmctx: vmctx, contref: pointer);
 
             // General-purpose printing functions.
             //

@@ -114,6 +114,9 @@ pub use self::data::*;
 mod func_refs;
 use func_refs::FuncRefs;
 
+use super::vm::stack_switching::imp::VMContRef;
+use super::vm::stack_switching::stack::ContinuationStack;
+
 /// A [`Store`] is a collection of WebAssembly instances and host-defined state.
 ///
 /// All WebAssembly instances and items will be attached to and refer to a
@@ -318,6 +321,7 @@ pub struct StoreOpaque {
     // Stack information used by stack switching instructions. See documentation
     // on `wasmtime_environ::stack_switching::StackChain` for details.
     stack_chain: StackChainCell,
+    continuations: Vec<Box<VMContRef>>,
 
     instances: Vec<StoreInstance>,
     #[cfg(feature = "component-model")]
@@ -552,6 +556,7 @@ impl<T> Store<T> {
                 engine: engine.clone(),
                 runtime_limits: Default::default(),
                 stack_chain: StackChainCell::absent(),
+                continuations: Vec::new(),
                 instances: Vec::new(),
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
@@ -2148,6 +2153,20 @@ at https://bytecodealliance.org/security.
     fn deallocate_fiber_stack(&mut self, stack: wasmtime_fiber::FiberStack) {
         self.flush_fiber_stack();
         self.async_state.last_fiber_stack = Some(stack);
+    }
+
+    /// Allocates a new continuation. Note that we currently don't support
+    /// deallocating them. Instead, all continuations remain allocated
+    /// throughout the store's lifetime.
+    pub fn allocate_continuation(&mut self) -> Result<*mut VMContRef> {
+        // FIXME(frank-emrich) Do we need to pin this?
+        let mut continuation = Box::new(VMContRef::empty());
+        let stack_size = self.engine.config().stack_switching_config.stack_size;
+        let stack = ContinuationStack::new(stack_size)?;
+        continuation.stack = stack;
+        let ptr = continuation.deref_mut() as *mut VMContRef;
+        self.continuations.push(continuation);
+        Ok(ptr)
     }
 
     /// Releases the last fiber stack to the underlying instance allocator, if

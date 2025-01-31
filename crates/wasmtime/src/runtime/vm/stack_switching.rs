@@ -184,45 +184,6 @@ pub mod imp {
     unsafe impl Send for VMContRef {}
     unsafe impl Sync for VMContRef {}
 
-    /// Drops the given continuation, which either means deallocating it
-    /// (together with its stack) or returning it (and its stack) to a pool for
-    /// later reuse.
-    ///
-    /// If pooling is enabled, then all `VMContObj`s pointing to this
-    /// `VMContRef` must have outdated revision counters. The pool guarantees
-    /// that the revision counter stays unchanged if this `VMContRef` is reused.
-    ///
-    /// If pooling is disabled, then there must be no `VMContObj`s pointing to
-    /// this `VMContRef` anymore.
-    /// FIXME(frank-emrich) This second condition can currently be violated: We
-    /// call this immediately once a continuation returns, at which point such
-    /// `VMContObj`s may exist.
-    #[inline(always)]
-    pub fn drop_cont_ref(instance: &mut Instance, contref: *mut VMContRef) {
-        {
-            let contref = unsafe { contref.as_mut().unwrap() };
-            // A continuation must have run to completion before dropping it.
-            debug_assert!(contref.common_stack_information.state == State::Returned);
-
-            // Note that we *could* deallocate the `Payloads` (i.e., `args` and
-            // `values`) here, but choose not to:
-            // - If we are using on-demand allocation of `VMContRef`s, the
-            //   `Payloads` get deallocated as part of `Drop`-ing the `VMContRef`.
-            // - If we are using the pooling allocator, we deliberately return
-            //   the `contref` to the pool with its `Payloads` still allocated.
-            //   When the `contref` is handed out subsequently on another
-            //   allocation requesdt, we can resize the `Payloads` if needed.
-            //
-            // So instead we just clear the elements.
-            contref.args.clear();
-            contref.values.clear();
-        }
-
-        // The WasmFX allocator decides if "deallocating" a continuation means
-        // putting it back into the pool or actually deallocating it.
-        instance.stack_switching_deallocate_continuation(contref);
-    }
-
     /// TODO
     #[inline(always)]
     pub fn cont_new(
@@ -236,31 +197,22 @@ pub mod imp {
 
         let stack_size = store.engine().config().stack_switching_config.stack_size;
 
-        let (contref, mut stack) =
-            instance
-                .stack_switching_allocate_continuation()
-                .map_err(|_error| {
-                    TrapReason::User(anyhow::anyhow!("Fiber stack allocation failed!"))
-                })?;
+        let contref = store.allocate_continuation()?;
 
-        let tsp = stack.top().unwrap();
+        // let (contref, mut stack) =
+        //     instance
+        //         .stack_switching_allocate_continuation()
+        //         .map_err(|_error| {
+        //             TrapReason::User(anyhow::anyhow!("Fiber stack allocation failed!"))
+        //         })?;
 
         {
             let contref = unsafe { contref.as_mut().unwrap() };
+            let tsp = contref.stack.top().unwrap();
             contref.parent_chain = StackChain::Absent;
             // The continuation is fresh, which is a special case of being suspended.
             // Thus we need to set the correct end of the continuation chain: itself.
             contref.last_ancestor = contref;
-
-            // In order to give the pool a uniform interface for the optimized
-            // and baseline implementation, it returns the `ContinuationStack` as a
-            // standalone value, without being attached to the `VMContRef`.
-            // We attach them here, the previous `ContinuationStack` attached to the
-            // `VMContRef` while in the pool should be an empty dummy
-            // `ContinuationStack`.
-            std::mem::swap(&mut contref.stack, &mut stack);
-            debug_assert!(stack.is_unallocated());
-            debug_assert!(!contref.stack.is_unallocated());
 
             // The initialization function will allocate the actual args/return value buffer and
             // update this object (if needed).
