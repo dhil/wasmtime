@@ -196,7 +196,7 @@ impl Backtrace {
         trampoline_sp: usize,
         mut f: impl FnMut(Frame) -> ControlFlow<()>,
     ) -> ControlFlow<()> {
-        use crate::runtime::vm::stack_switching::imp::VMContRef;
+        use crate::runtime::vm::stack_switching::VMContRef;
         use wasmtime_environ::stack_switching::StackLimits;
 
         // Handle the stack that is currently running (which may be a

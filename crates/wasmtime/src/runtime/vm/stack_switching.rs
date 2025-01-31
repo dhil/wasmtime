@@ -33,7 +33,7 @@
 /// (i.e., the one pointed to by the VMContObj) has a pointer to the
 /// other end of the chain (i.e., its last ancestor).
 pub mod vm_contobj {
-    use super::imp::VMContRef;
+    use super::VMContRef;
     use core::ptr::NonNull;
 
     // This type is 16 byte aligned so that we can do an aligned load
@@ -60,7 +60,7 @@ unsafe impl Sync for VMContObj {}
 
 pub mod stack;
 
-pub mod imp {
+pub mod vm_contref {
     use super::stack::ContinuationStack;
     use super::stack_chain::StackChain;
     use crate::runtime::vm::{
@@ -76,7 +76,7 @@ pub mod imp {
         stack_switching::{CommonStackInformation, ENABLE_DEBUG_PRINTING},
     };
 
-    /// TODO
+    /// The main type representing a continuation.
     #[repr(C)]
     pub struct VMContRef {
         /// The `CommonStackInformation` of this continuation's stack.
@@ -184,7 +184,7 @@ pub mod imp {
     unsafe impl Send for VMContRef {}
     unsafe impl Sync for VMContRef {}
 
-    /// TODO
+    /// Implements `cont.new` instructions (i.e., creation of continuations).
     #[inline(always)]
     pub fn cont_new(
         store: &mut dyn VMStore,
@@ -198,51 +198,40 @@ pub mod imp {
         let stack_size = store.engine().config().stack_switching_config.stack_size;
 
         let contref = store.allocate_continuation()?;
+        let contref = unsafe { contref.as_mut().unwrap() };
 
-        // let (contref, mut stack) =
-        //     instance
-        //         .stack_switching_allocate_continuation()
-        //         .map_err(|_error| {
-        //             TrapReason::User(anyhow::anyhow!("Fiber stack allocation failed!"))
-        //         })?;
+        let tsp = contref.stack.top().unwrap();
+        contref.parent_chain = StackChain::Absent;
+        // The continuation is fresh, which is a special case of being suspended.
+        // Thus we need to set the correct end of the continuation chain: itself.
+        contref.last_ancestor = contref;
 
-        {
-            let contref = unsafe { contref.as_mut().unwrap() };
-            let tsp = contref.stack.top().unwrap();
-            contref.parent_chain = StackChain::Absent;
-            // The continuation is fresh, which is a special case of being suspended.
-            // Thus we need to set the correct end of the continuation chain: itself.
-            contref.last_ancestor = contref;
+        // The initialization function will allocate the actual args/return value buffer and
+        // update this object (if needed).
+        let contref_args_ptr = &mut contref.args as *mut _ as *mut Array<ValRaw>;
 
-            // The initialization function will allocate the actual args/return value buffer and
-            // update this object (if needed).
-            let contref_args_ptr = &mut contref.args as *mut _ as *mut Array<ValRaw>;
+        contref.stack.initialize(
+            func.cast::<VMFuncRef>(),
+            caller_vmctx,
+            contref_args_ptr,
+            param_count,
+            result_count,
+        );
 
-            contref.stack.initialize(
-                func.cast::<VMFuncRef>(),
-                caller_vmctx,
-                contref_args_ptr,
-                param_count,
-                result_count,
-            );
+        // Now that the initial stack pointer was set by the initialization
+        // function, use it to determine stack limit.
+        let stack_pointer = contref.stack.control_context_stack_pointer();
+        // Same caveat regarding stack_limit here as descibed in
+        // `wasmtime::runtime::func::RuntimeEntryState::enter_wasm`.
+        let wasm_stack_limit = std::cmp::max(
+            stack_pointer - store.engine().config().max_wasm_stack,
+            tsp as usize - stack_size,
+        );
+        let limits = StackLimits::with_stack_limit(wasm_stack_limit);
+        let csi = &mut contref.common_stack_information;
+        csi.state = State::Fresh;
+        csi.limits = limits;
 
-            // Now that the initial stack pointer was set by the initialization
-            // function, use it to determine stack limit.
-            let stack_pointer = contref.stack.control_context_stack_pointer();
-            // Same caveat regarding stack_limit here as descibed in
-            // `wasmtime::runtime::func::RuntimeEntryState::enter_wasm`.
-            let wasm_stack_limit = std::cmp::max(
-                stack_pointer - store.engine().config().max_wasm_stack,
-                tsp as usize - stack_size,
-            );
-            let limits = StackLimits::with_stack_limit(wasm_stack_limit);
-            let csi = &mut contref.common_stack_information;
-            csi.state = State::Fresh;
-            csi.limits = limits;
-        };
-
-        // TODO(dhil): we need memory clean up of
-        // continuation reference objects.
         debug_println!("Created contref @ {:p}", contref);
         Ok(contref)
     }
@@ -279,11 +268,13 @@ pub mod imp {
     }
 }
 
+pub use vm_contref::*;
+
 //
 // Stack chain
 //
 pub mod stack_chain {
-    use super::imp::VMContRef;
+    use super::VMContRef;
     use core::cell::UnsafeCell;
     use wasmtime_environ::stack_switching::CommonStackInformation;
     pub use wasmtime_environ::stack_switching::StackLimits;

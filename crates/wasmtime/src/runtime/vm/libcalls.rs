@@ -54,8 +54,8 @@
 //! }
 //! ```
 
-use super::stack_switching::imp::VMContRef;
 use super::stack_switching::VMContObj;
+use super::stack_switching::VMContRef;
 use crate::prelude::*;
 use crate::runtime::vm::table::{Table, TableElementType};
 use crate::runtime::vm::vmcontext::VMFuncRef;
@@ -1425,13 +1425,8 @@ fn cont_new(
     param_count: u32,
     result_count: u32,
 ) -> Result<Option<AllocationSize>, TrapReason> {
-    let ans = crate::vm::stack_switching::imp::cont_new(
-        store,
-        instance,
-        func,
-        param_count,
-        result_count,
-    )?;
+    let ans =
+        crate::vm::stack_switching::cont_new(store, instance, func, param_count, result_count)?;
     Ok(Some(AllocationSize(ans.cast::<u8>() as usize)))
 }
 

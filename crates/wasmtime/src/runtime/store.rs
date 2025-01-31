@@ -114,8 +114,8 @@ pub use self::data::*;
 mod func_refs;
 use func_refs::FuncRefs;
 
-use super::vm::stack_switching::imp::VMContRef;
 use super::vm::stack_switching::stack::ContinuationStack;
+use super::vm::stack_switching::VMContRef;
 
 /// A [`Store`] is a collection of WebAssembly instances and host-defined state.
 ///
