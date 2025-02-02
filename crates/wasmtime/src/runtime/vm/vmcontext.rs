@@ -729,13 +729,6 @@ mod test_vmtag_definition {
             usize::from(offsets.ptr.size_of_vmtag_definition())
         );
     }
-
-    #[test]
-    fn check_vmtag_begins_aligned() {
-        let module = Module::new();
-        let offsets = VMOffsets::new(u8::try_from(size_of::<*mut u8>()).unwrap(), &module);
-        assert_eq!(offsets.vmctx_tags_begin() % 16, 0);
-    }
 }
 
 /// The VM caller-checked "funcref" record, for caller-side signature checking.

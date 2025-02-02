@@ -34,8 +34,8 @@
 //      imported_tags: [VMTagImport; module.num_imported_tags],
 //      tables: [VMTableDefinition; module.num_defined_tables],
 //      globals: [VMGlobalDefinition; module.num_defined_globals],
-//      tags: [VMTagDefinition; module.num_defined_tags],
 //      func_refs: [VMFuncRef; module.num_escaped_funcs],
+//      tags: [VMTagDefinition; module.num_defined_tags],
 // }
 
 use crate::{
@@ -83,11 +83,11 @@ pub struct VMOffsets<P> {
     pub num_owned_memories: u32,
     /// The number of defined globals in the module.
     pub num_defined_globals: u32,
-    /// The number of defined tags in the module.
-    pub num_defined_tags: u32,
     /// The number of escaped functions in the module, the size of the func_refs
     /// array.
     pub num_escaped_funcs: u32,
+    /// The number of defined tags in the module.
+    pub num_defined_tags: u32,
 
     // precalculated offsets of various member fields
     imported_functions: u32,
@@ -99,8 +99,8 @@ pub struct VMOffsets<P> {
     defined_memories: u32,
     owned_memories: u32,
     defined_globals: u32,
-    defined_tags: u32,
     defined_func_refs: u32,
+    defined_tags: u32,
     size: u32,
 }
 
@@ -369,11 +369,11 @@ pub struct VMOffsetsFields<P> {
     pub num_owned_memories: u32,
     /// The number of defined globals in the module.
     pub num_defined_globals: u32,
-    /// The number of defined tags in the module.
-    pub num_defined_tags: u32,
     /// The number of escaped functions in the module, the size of the function
     /// references array.
     pub num_escaped_funcs: u32,
+    /// The number of defined tags in the module.
+    pub num_defined_tags: u32,
 }
 
 impl<P: PtrSize> VMOffsets<P> {
@@ -398,8 +398,8 @@ impl<P: PtrSize> VMOffsets<P> {
             num_defined_memories: cast_to_u32(module.num_defined_memories()),
             num_owned_memories,
             num_defined_globals: cast_to_u32(module.globals.len() - module.num_imported_globals),
-            num_defined_tags: cast_to_u32(module.tags.len() - module.num_imported_tags),
             num_escaped_funcs: cast_to_u32(module.num_escaped_funcs),
+            num_defined_tags: cast_to_u32(module.tags.len() - module.num_imported_tags),
         })
     }
 
@@ -427,10 +427,10 @@ impl<P: PtrSize> VMOffsets<P> {
                     num_imported_tags: _,
                     num_defined_tables: _,
                     num_defined_globals: _,
-                    num_defined_tags: _,
                     num_defined_memories: _,
                     num_owned_memories: _,
                     num_escaped_funcs: _,
+                    num_defined_tags: _,
 
                     // used as the initial size below
                     size,
@@ -459,8 +459,8 @@ impl<P: PtrSize> VMOffsets<P> {
         }
 
         calculate_sizes! {
-            defined_func_refs: "module functions",
             defined_tags: "defined tags",
+            defined_func_refs: "module functions",
             defined_globals: "defined globals",
             defined_tables: "defined tables",
             imported_tags: "imported tags",
@@ -498,8 +498,8 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
             defined_memories: 0,
             owned_memories: 0,
             defined_globals: 0,
-            defined_tags: 0,
             defined_func_refs: 0,
+            defined_tags: 0,
             size: 0,
         };
 
@@ -552,16 +552,12 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
             align(16),
             size(defined_globals)
                 = cmul(ret.num_defined_globals, ret.ptr.size_of_vmglobal_definition()),
-            size(defined_tags)
-                = cmul(ret.num_defined_tags, ret.ptr.size_of_vmtag_definition()),
-            align(16),
             size(defined_func_refs) = cmul(
                 ret.num_escaped_funcs,
                 ret.ptr.size_of_vm_func_ref(),
             ),
-            align(16), // TODO(dhil): This could probably be done more
-                       // efficiently by packing the pointer into the above 16 byte
-                       // alignment
+            size(defined_tags)
+                = cmul(ret.num_defined_tags, ret.ptr.size_of_vmtag_definition()),
         }
 
         ret.size = next_field_offset;
@@ -773,16 +769,16 @@ impl<P: PtrSize> VMOffsets<P> {
         self.defined_globals
     }
 
-    /// The offset of the `tags` array.
-    #[inline]
-    pub fn vmctx_tags_begin(&self) -> u32 {
-        self.defined_tags
-    }
-
     /// The offset of the `func_refs` array.
     #[inline]
     pub fn vmctx_func_refs_begin(&self) -> u32 {
         self.defined_func_refs
+    }
+
+    /// The offset of the `tags` array.
+    #[inline]
+    pub fn vmctx_tags_begin(&self) -> u32 {
+        self.defined_tags
     }
 
     /// Return the size of the `VMContext` allocation.
