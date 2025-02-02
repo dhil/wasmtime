@@ -624,8 +624,6 @@ fn switch_image_and_non_image() -> Result<()> {
     Ok(())
 }
 
-// NOTE(dhil): this test is sensitive to the layout and (potentially
-// naming of fields) in crates/environ/src/vmoffsets.rs
 #[test]
 #[cfg(target_pointer_width = "64")]
 #[cfg_attr(miri, ignore)]
@@ -638,20 +636,19 @@ fn instance_too_large() -> Result<()> {
     let engine = Engine::new(&config)?;
     let expected = if cfg!(feature = "wmemcheck") {
         "\
-        instance allocation for this module requires 352 bytes which exceeds the \
+        instance allocation for this module requires 336 bytes which exceeds the \
 configured maximum of 16 bytes; breakdown of allocation requirement:
 
- * 68.18% - 240 bytes - instance state management
- * 25.00% - 88 bytes - static vmctx data
+ * 71.43% - 240 bytes - instance state management
+ * 28.57% - 96 bytes - static vmctx data
 "
     } else {
         "\
-instance allocation for this module requires 256 bytes which exceeds the \
+instance allocation for this module requires 240 bytes which exceeds the \
 configured maximum of 16 bytes; breakdown of allocation requirement:
 
- * 56.25% - 144 bytes - instance state management
- * 6.25% - 16 bytes - stack switching stack chain
- * 34.38% - 88 bytes - static vmctx data
+ * 60.00% - 144 bytes - instance state management
+ * 40.00% - 96 bytes - static vmctx data
 "
     };
     match Module::new(&engine, "(module)") {
@@ -667,19 +664,20 @@ configured maximum of 16 bytes; breakdown of allocation requirement:
 
     let expected = if cfg!(feature = "wmemcheck") {
         "\
-instance allocation for this module requires 1952 bytes which exceeds the \
+instance allocation for this module requires 1936 bytes which exceeds the \
 configured maximum of 16 bytes; breakdown of allocation requirement:
 
- * 12.30% - 240 bytes - instance state management
- * 81.97% - 1600 bytes - defined globals
+ * 12.40% - 240 bytes - instance state management
+ * 82.64% - 1600 bytes - defined globals
 "
     } else {
         "\
-instance allocation for this module requires 1856 bytes which exceeds the \
+instance allocation for this module requires 1840 bytes which exceeds the \
 configured maximum of 16 bytes; breakdown of allocation requirement:
 
- * 7.76% - 144 bytes - instance state management
- * 86.21% - 1600 bytes - defined globals
+ * 7.83% - 144 bytes - instance state management
+ * 86.96% - 1600 bytes - defined globals
+ * 5.22% - 96 bytes - static vmctx data
 "
     };
     match Module::new(&engine, &lots_of_globals) {

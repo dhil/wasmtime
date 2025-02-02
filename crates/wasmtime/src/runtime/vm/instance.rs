@@ -578,7 +578,7 @@ impl Instance {
     /// Return a pointer to the stack chain
     #[inline]
     pub fn stack_chain(&mut self) -> *mut *mut StackChainCell {
-        unsafe { self.vmctx_plus_offset_mut(self.offsets().vmctx_stack_switching_stack_chain()) }
+        unsafe { self.vmctx_plus_offset_mut(self.offsets().ptr.vmctx_stack_chain()) }
     }
 
     /// Return a pointer to the global epoch counter used by this instance.
@@ -1491,8 +1491,7 @@ impl Instance {
     #[allow(dead_code)]
     pub(crate) fn set_stack_switching_stack_chain(&mut self, chain: *mut *mut StackChainCell) {
         unsafe {
-            let ptr =
-                self.vmctx_plus_offset_mut(self.offsets().vmctx_stack_switching_stack_chain());
+            let ptr = self.vmctx_plus_offset_mut(self.offsets().ptr.vmctx_stack_chain());
             *ptr = chain;
         }
     }

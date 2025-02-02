@@ -54,10 +54,10 @@
 )
 ;; wasm[0]::function[0]::load8:
 ;;       push_frame
-;;       xload64le_offset8 x6, x0, 104
+;;       xload64le_offset8 x6, x0, 112
 ;;       zext32 x7, x2
 ;;       br_if_xulteq64 x6, x7, 0x12    // target = 0x1a
-;;    f: xload64le_offset8 x7, x0, 96
+;;    f: xload64le_offset8 x7, x0, 104
 ;;       xload8_u32_g32 x0, x7, x2, 0
 ;;       pop_frame
 ;;       ret
@@ -65,34 +65,34 @@
 ;;
 ;; wasm[0]::function[1]::load16:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 2
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 2
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload16le_u32_g32 x0, x5, x2, 0
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[2]::load32:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 4
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 4
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload32le_g32 x0, x5, x2, 0
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[3]::load64:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 8
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 8
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload64le_g32 x0, x5, x2, 0
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[4]::store8:
 ;;       push_frame
-;;       xload64le_offset8 x6, x0, 104
+;;       xload64le_offset8 x6, x0, 112
 ;;       zext32 x7, x2
 ;;       br_if_xulteq64 x6, x7, 0x12    // target = 0x1a
-;;    f: xload64le_offset8 x7, x0, 96
+;;    f: xload64le_offset8 x7, x0, 104
 ;;       xstore8_g32 x7, x2, 0, x3
 ;;       pop_frame
 ;;       ret
@@ -100,88 +100,88 @@
 ;;
 ;; wasm[0]::function[5]::store16:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 2
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 2
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore16le_g32 x5, x2, 0, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[6]::store32:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 4
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 4
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore32le_g32 x5, x2, 0, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[7]::store64:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 8
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 8
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore64le_g32 x5, x2, 0, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[8]::load8_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 33
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 33
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload8_u32_g32 x0, x5, x2, 32
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[9]::load16_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 34
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 34
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload16le_u32_g32 x0, x5, x2, 32
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[10]::load32_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 36
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 36
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload32le_g32 x0, x5, x2, 32
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[11]::load64_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 40
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 40
+;;       xload64le_offset8 x5, x0, 104
 ;;       xload64le_g32 x0, x5, x2, 32
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[12]::store8_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 9
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 9
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore8_g32 x5, x2, 8, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[13]::store16_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 10
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 10
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore16le_g32 x5, x2, 8, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[14]::store32_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 12
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 12
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore32le_g32 x5, x2, 8, x3
 ;;       pop_frame
 ;;       ret
 ;;
 ;; wasm[0]::function[15]::store64_offset:
 ;;       push_frame
-;;       xbc32_bound_trap x2, x0, 104, 16
-;;       xload64le_offset8 x5, x0, 96
+;;       xbc32_bound_trap x2, x0, 112, 16
+;;       xload64le_offset8 x5, x0, 104
 ;;       xstore64le_g32 x5, x2, 8, x3
 ;;       pop_frame
 ;;       ret

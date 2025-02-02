@@ -1332,7 +1332,7 @@ pub fn vmctx_load_stack_chain<'a>(
     builder: &mut FunctionBuilder,
     vmctx: ir::Value,
 ) -> StackChain {
-    let offset = i32::try_from(env.offsets.vmctx_stack_switching_stack_chain()).unwrap();
+    let offset = i32::try_from(env.offsets.ptr.vmctx_stack_chain()).unwrap();
 
     // The `stack_switching_stack_chain` field of the VMContext only
     // contains a pointer to the `StackChainCell` in the `Store`.
@@ -1356,7 +1356,7 @@ pub fn vmctx_store_stack_chain<'a>(
     vmctx: ir::Value,
     stack_chain: &StackChain,
 ) {
-    let offset = i32::try_from(env.offsets.vmctx_stack_switching_stack_chain()).unwrap();
+    let offset = i32::try_from(env.offsets.ptr.vmctx_stack_chain()).unwrap();
 
     // Same situation as in `load_stack_chain` regarding pointer
     // indirection and it being `readonly`.

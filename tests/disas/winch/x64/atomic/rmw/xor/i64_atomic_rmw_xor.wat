@@ -23,7 +23,7 @@
 ;;       cmpq    $0, %rcx
 ;;       jne     0x71
 ;;   46: movl    $0, %ecx
-;;       movq    0x58(%r14), %r11
+;;       movq    0x60(%r14), %r11
 ;;       movq    (%r11), %rdx
 ;;       addq    %rcx, %rdx
 ;;       movq    (%rdx), %rax

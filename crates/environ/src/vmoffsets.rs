@@ -17,6 +17,7 @@
 //      gc_heap_data: *mut T, // Collector-specific pointer
 //      store: *mut dyn Store,
 //      type_ids: *const VMSharedTypeIndex,
+//      stack_chain: *const StackChainCell,
 //
 //      // Variable-width fields come after the fixed-width fields above. Place
 //      // memory-related items first as they're some of the most frequently
@@ -101,12 +102,6 @@ pub struct VMOffsets<P> {
     defined_tags: u32,
     defined_func_refs: u32,
     size: u32,
-
-    // The following field stores a pointer into the StoreOpauqe, to value of
-    // type `crate::stack_switching::StackChain`.
-    // The head of the chain is the
-    // currently executing stack (initial stack or a continuation).
-    stack_switching_stack_chain: u32,
 }
 
 /// Trait used for the `ptr` representation of the field of `VMOffsets`
@@ -316,12 +311,20 @@ pub trait PtrSize {
         self.vmctx_store() + 2 * self.size()
     }
 
+    /// The offset of the `stack_Chain` field.
+    /// This field stores a pointer into the `StoreOpauqe`, to a value of type
+    /// `crate::stack_switching::StackChain`.
+    #[inline]
+    fn vmctx_stack_chain(&self) -> u8 {
+        self.vmctx_type_ids_array() + self.size()
+    }
+
     /// The end of statically known offsets in `VMContext`.
     ///
     /// Data after this is dynamically sized.
     #[inline]
     fn vmctx_dynamic_data_start(&self) -> u8 {
-        self.vmctx_type_ids_array() + self.size()
+        self.vmctx_stack_chain() + self.size()
     }
 }
 
@@ -456,7 +459,6 @@ impl<P: PtrSize> VMOffsets<P> {
         }
 
         calculate_sizes! {
-            stack_switching_stack_chain: "stack switching stack chain",
             defined_func_refs: "module functions",
             defined_tags: "defined tags",
             defined_globals: "defined globals",
@@ -499,7 +501,6 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
             defined_tags: 0,
             defined_func_refs: 0,
             size: 0,
-            stack_switching_stack_chain: 0,
         };
 
         // Convenience functions for checked addition and multiplication.
@@ -544,7 +545,7 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
                 = cmul(ret.num_imported_tables, ret.size_of_vmtable_import()),
             size(imported_globals)
                 = cmul(ret.num_imported_globals, ret.size_of_vmglobal_import()),
-        size(imported_tags)
+            size(imported_tags)
                 = cmul(ret.num_imported_tags, ret.size_of_vmtag_import()),
             size(defined_tables)
                 = cmul(ret.num_defined_tables, ret.size_of_vmtable_definition()),
@@ -558,9 +559,6 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
                 ret.num_escaped_funcs,
                 ret.ptr.size_of_vm_func_ref(),
             ),
-            size(stack_switching_stack_chain)
-                = ret.ptr.size(),
-
             align(16), // TODO(dhil): This could probably be done more
                        // efficiently by packing the pointer into the above 16 byte
                        // alignment
@@ -785,12 +783,6 @@ impl<P: PtrSize> VMOffsets<P> {
     #[inline]
     pub fn vmctx_func_refs_begin(&self) -> u32 {
         self.defined_func_refs
-    }
-
-    /// TODO
-    #[inline]
-    pub fn vmctx_stack_switching_stack_chain(&self) -> u32 {
-        self.stack_switching_stack_chain
     }
 
     /// Return the size of the `VMContext` allocation.

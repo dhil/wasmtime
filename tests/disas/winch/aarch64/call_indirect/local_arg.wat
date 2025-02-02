@@ -50,13 +50,13 @@
 ;;       mov     x16, #0
 ;;       mov     w1, w16
 ;;       mov     x2, x9
-;;       ldur    x3, [x2, #0x60]
+;;       ldur    x3, [x2, #0x68]
 ;;       cmp     x1, x3, uxtx
 ;;       b.hs    #0x168
 ;;   90: mov     x16, x1
 ;;       mov     x16, #8
 ;;       mul     x16, x16, x16
-;;       ldur    x2, [x2, #0x58]
+;;       ldur    x2, [x2, #0x60]
 ;;       mov     x4, x2
 ;;       add     x2, x2, x16, uxtx
 ;;       cmp     w1, w3, uxtx
