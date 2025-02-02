@@ -11,11 +11,12 @@ use wasmtime_environ::stack_switching::Array;
 use crate::runtime::vm::{VMContext, VMFuncRef, ValRaw};
 
 cfg_if::cfg_if! {
-    if #[cfg(unix)] {
+    if #[cfg(all(unix, target_arch = "x86_64"))] {
         pub mod unix;
         use unix as imp;
     } else {
-        compile_error!("the stack switching feature is not supported on this platform");
+        pub mod dummy;
+        use dummy as imp;
     }
 }
 

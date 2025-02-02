@@ -39,6 +39,7 @@ mod pulley;
 mod relocs;
 mod stack_creator;
 mod stack_overflow;
+#[cfg(all(unix, target_arch = "x86_64"))]
 mod stack_switching;
 mod store;
 mod structs;
