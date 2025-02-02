@@ -1,4 +1,6 @@
-//! TODO(dhil): Write documentation for this module.
+//! This module contains basic type definitions used by the implementation of
+//! the stack switching proposal.
+
 use core::{
     convert::From,
     default::Default,

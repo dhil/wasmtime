@@ -1,4 +1,5 @@
-//! Continuations TODO
+//! This module contains the runtime components of the implementation of the
+//! stack switching proposal.
 
 /// A continuation object is a handle to a continuation reference
 /// (i.e. an actual stack). A continuation object only be consumed
