@@ -152,7 +152,7 @@ impl<T> Array<T> {
         Self {
             length: 0,
             capacity: 0,
-            data: std::ptr::null_mut(),
+            data: core::ptr::null_mut(),
         }
     }
 

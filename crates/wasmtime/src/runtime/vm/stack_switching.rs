@@ -478,8 +478,8 @@ mod test {
         // The Rust spec does not technically guarantee that the null pointer
         // optimization applies to a struct containing a NonNull.
         assert_eq!(
-            std::mem::size_of::<Option<super::safe_vm_contobj::VMContObj>>(),
-            std::mem::size_of::<super::safe_vm_contobj::VMContObj>()
+            std::mem::size_of::<Option<super::VMContObj>>(),
+            std::mem::size_of::<super::VMContObj>()
         );
     }
 }
