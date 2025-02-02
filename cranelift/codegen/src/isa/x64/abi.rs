@@ -261,7 +261,7 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             // special case before the loop below.
             if param.value_type == types::I128
                 && args_or_rets == ArgsOrRets::Args
-                && (call_conv == CallConv::SystemV || is_tail)
+                && call_conv == CallConv::SystemV
             {
                 let mut slots = ABIArgSlotVec::new();
                 match (
