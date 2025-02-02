@@ -1799,9 +1799,6 @@ impl StoreOpaque {
 
     #[cfg(feature = "gc")]
     fn trace_wasm_stack_roots(&mut self, gc_roots_list: &mut GcRootsList) {
-        use crate::runtime::vm::SendSyncPtr;
-        use core::ptr::NonNull;
-
         log::trace!("Begin trace GC roots :: Wasm stack");
 
         Backtrace::trace(self, |frame| {
