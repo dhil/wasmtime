@@ -36,9 +36,10 @@ pub mod vm_contobj {
     use super::VMContRef;
     use core::ptr::NonNull;
 
-    // This type is 16 byte aligned so that we can do an aligned load
-    // into a 128bit value (see
-    // [wasmtime_cranelift::stack_switching::fatpointer::pointer_type]).
+    // FIXME(frank-emrich) Does this actually need to be 16-byte aligned any
+    // more? Now that we use I128 on the Cranelift side (see
+    // [wasmtime_cranelift::stack_switching::fatpointer::pointer_type]), it
+    // should be fine to use the natural alignment of the type.
     #[repr(C, align(16))]
     #[derive(Debug, Clone, Copy)]
     pub struct VMContObj {
