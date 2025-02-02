@@ -18,49 +18,33 @@ pub const CONTROL_CONTEXT_SIZE: usize = 24;
 use super::control_effect::ControlEffect;
 use super::fatpointer;
 
-#[allow(unused_macros, reason = "TODO")]
-macro_rules! call_builtin {
-    ( $builder:ident, $env:ident, $f:ident( $($args:expr),* ) ) => (
-        {
-            let fname = $env.builtin_functions.$f(&mut $builder.func);
-            let vmctx = $env.vmctx_val(&mut $builder.cursor());
-            $builder.ins().call(fname, &[vmctx, $( $args ), * ]);
-        }
-    );
-    ( $builder:ident, $env:ident, let $name:ident = $f:ident( $($args:expr),* ) )=> (
-        let $name = {
-            let fname = $env.builtin_functions.$f(&mut $builder.func);
-            let vmctx = $env.vmctx_val(&mut $builder.cursor());
-            let call_inst = $builder.ins().call(fname, &[vmctx, $( $args ), * ]);
-            *$builder.func.dfg.inst_results(call_inst).first().unwrap()
-        };
-    );
-}
-
+// FIXME(frank-emrich) The debugging facilities in this module are very unsafe
+// (see comment on `emit_debug_print`). They are not supposed to be part of the
+// final, upstreamed code, but deleted beforehand.
 #[macro_use]
-pub(crate) mod stack_switching_helpers {
-    use core::marker::PhantomData;
+pub(crate) mod delete_me {
     use cranelift_codegen::ir;
     use cranelift_codegen::ir::condcodes::IntCC;
     use cranelift_codegen::ir::types::*;
     use cranelift_codegen::ir::InstBuilder;
-    use cranelift_codegen::ir::{StackSlot, StackSlotKind::*};
     use cranelift_frontend::FunctionBuilder;
-    use std::mem;
-    use wasmtime_environ::PtrSize;
 
-    // This is a reference to this very module.
-    // We need it so that we can refer to the functions inside this module from
-    // macros, such that the same path works when the macro is expanded inside
-    // or outside of this module.
-    use crate::stack_switching::instructions::stack_switching_helpers as helpers;
+    macro_rules! call_builtin {
+        ( $builder:ident, $env:ident, $f:ident( $($args:expr),* ) ) => (
+            {
+                let fname = $env.builtin_functions.$f(&mut $builder.func);
+                let vmctx = $env.vmctx_val(&mut $builder.cursor());
+                $builder.ins().call(fname, &[vmctx, $( $args ), * ]);
+            }
+        );
+    }
 
     /// FIXME(frank-emrich) This printing functionality is inherently unsafe: It
     /// hard-codes the addresses of the string literals it uses, without any
     /// relocation information. Therefore, it will immediately crash and burn if
     /// the compiled code is ever used in a different execution of wasmtime than
     /// the one producing it.
-    /// As a result It is nor supposed to be part of the final, upstreamed code.
+    /// As a result it is not supposed to be part of the final, upstreamed code.
     ///
     /// Low-level implementation of debug printing. Do not use directly; see
     /// `emit_debug_println!` macro for doing actual printing.
@@ -168,14 +152,14 @@ pub(crate) mod stack_switching_helpers {
     /// * `builder` - Type &mut FunctionBuilder,
     /// * `msg` : String literal, containing placeholders like those supported by println!
     /// * remaining arguments: ir::Values filled into the placeholders in `msg`
-    #[allow(unused_macros, reason = "TODO")]
+    #[allow(unused_macros, reason = "Only used in certain debug builds")]
     macro_rules! emit_debug_println {
         ($env : expr, $builder : expr, $msg : literal, $( $arg:expr ),*) => {
             let msg_newline : &'static str= std::concat!(
                 $msg,
                 "\n"
             );
-            helpers::emit_debug_print($env, $builder, msg_newline, &[$($arg),*]);
+            emit_debug_print($env, $builder, msg_newline, &[$($arg),*]);
         }
     }
 
@@ -274,7 +258,7 @@ pub(crate) mod stack_switching_helpers {
                 $operator_string,
                 " {} does not hold\n"
             );
-            helpers::emit_debug_assert_icmp($env, $builder, $operator, $v1, $v2, msg);
+            emit_debug_assert_icmp($env, $builder, $operator, $v1, $v2, msg);
         };
     }
 
@@ -289,7 +273,7 @@ pub(crate) mod stack_switching_helpers {
             );
             // This makes the borrow checker happy if $condition uses env or builder.
             let c = $condition;
-            helpers::emit_debug_assert_generic($env, $builder, c, msg);
+            emit_debug_assert_generic($env, $builder, c, msg);
         };
     }
 
@@ -317,6 +301,21 @@ pub(crate) mod stack_switching_helpers {
             );
         };
     }
+}
+use delete_me::*;
+
+/// This module contains compile-time counterparts to types defined elsewhere.
+pub(crate) mod stack_switching_helpers {
+    use super::delete_me::*;
+    use core::marker::PhantomData;
+    use cranelift_codegen::ir;
+    use cranelift_codegen::ir::condcodes::IntCC;
+    use cranelift_codegen::ir::types::*;
+    use cranelift_codegen::ir::InstBuilder;
+    use cranelift_codegen::ir::{StackSlot, StackSlotKind::*};
+    use cranelift_frontend::FunctionBuilder;
+    use std::mem;
+    use wasmtime_environ::PtrSize;
 
     #[derive(Copy, Clone)]
     pub struct VMContRef {
@@ -1635,7 +1634,14 @@ pub(crate) fn translate_cont_new<'a>(
 
     let nargs = builder.ins().iconst(I32, arg_types.len() as i64);
     let nreturns = builder.ins().iconst(I32, return_types.len() as i64);
-    call_builtin!(builder, env, let contref = cont_new(func, nargs, nreturns));
+
+    let cont_new_func = env.builtin_functions.cont_new(&mut builder.func);
+    let vmctx = env.vmctx_val(&mut builder.cursor());
+    let call_inst = builder
+        .ins()
+        .call(cont_new_func, &[vmctx, func, nargs, nreturns]);
+    let contref = *builder.func.dfg.inst_results(call_inst).first().unwrap();
+
     let tag = helpers::VMContRef::new(contref).get_revision(env, builder);
     let contobj = fatpointer::construct(env, &mut builder.cursor(), tag, contref);
     emit_debug_println!(env, builder, "[cont_new] contref = {:p}", contref);
