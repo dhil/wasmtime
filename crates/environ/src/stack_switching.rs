@@ -11,7 +11,7 @@ use core::{
 #[allow(dead_code, reason = "Only accessed in debug builds")]
 pub const ENABLE_DEBUG_PRINTING: bool = false;
 
-/// TODO(dhil): Write documentation.
+/// FIXME(frank-emrich) Will remove in the final upstreamed version
 #[macro_export]
 macro_rules! debug_println {
     ($( $args:expr ),+ ) => {

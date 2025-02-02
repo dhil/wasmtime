@@ -13,7 +13,7 @@ use core::ops::Deref;
 use core::ops::DerefMut;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use stack_switching::stack_chain::StackChainCell;
+use stack_switching::StackChainCell;
 use wasmtime_environ::{
     DefinedFuncIndex, DefinedMemoryIndex, HostPtr, ModuleInternedTypeIndex, VMOffsets,
     VMSharedTypeIndex,

@@ -23,7 +23,7 @@
 
 use crate::prelude::*;
 use crate::runtime::store::StoreOpaque;
-use crate::runtime::vm::stack_switching::stack_chain::StackChain;
+use crate::runtime::vm::stack_switching::StackChain;
 use crate::runtime::vm::{
     traphandlers::{tls, CallThreadState},
     Unwind, VMRuntimeLimits,

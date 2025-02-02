@@ -409,7 +409,7 @@ where
 // usage of its accessor methods.
 mod call_thread_state {
     use super::*;
-    use crate::runtime::vm::stack_switching::stack_chain::StackChain;
+    use crate::runtime::vm::stack_switching::StackChain;
     use crate::runtime::vm::Unwind;
     use crate::RuntimeEntryState;
 

@@ -360,7 +360,7 @@ macro_rules! for_each_function_signature {
 }
 
 mod typed;
-use crate::runtime::vm::stack_switching::stack_chain::{StackChain, StackChainCell};
+use crate::runtime::vm::stack_switching::{StackChain, StackChainCell};
 pub use typed::*;
 
 impl Func {

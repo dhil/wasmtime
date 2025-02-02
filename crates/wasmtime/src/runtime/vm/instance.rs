@@ -5,7 +5,7 @@
 use crate::runtime::vm::const_expr::{ConstEvalContext, ConstExprEvaluator};
 use crate::runtime::vm::export::Export;
 use crate::runtime::vm::memory::{Memory, RuntimeMemoryCreator};
-use crate::runtime::vm::stack_switching::stack_chain::StackChainCell;
+use crate::runtime::vm::stack_switching::StackChainCell;
 use crate::runtime::vm::table::{Table, TableElement, TableElementType};
 use crate::runtime::vm::vmcontext::{
     VMBuiltinFunctionsArray, VMContext, VMFuncRef, VMFunctionImport, VMGlobalDefinition,
