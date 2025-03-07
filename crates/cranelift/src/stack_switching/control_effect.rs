@@ -8,8 +8,8 @@ use wasmtime_environ::stack_switching as stack_switching_environ;
 /// resume signal, suspension signal, and handler index into a
 /// u64 value. This instance is used at compile time. There is a runtime
 /// counterpart in `continuations/src/lib.rs`.
-/// We convert to and from u64 as follows: The 4 LSBs of the u64 are the
-/// discriminant, the 4 MSBs are the handler_index (if `Suspend`)
+/// We convert to and from u64 as follows: The low 32 bits of the u64 are the
+/// discriminant, the high 32 bits are the handler_index (if `Suspend`)
 #[derive(Clone, Copy)]
 pub struct ControlEffect(ir::Value);
 
@@ -37,7 +37,7 @@ impl ControlEffect {
     ) -> Self {
         let discriminant = builder.ins().iconst(
             I64,
-            stack_switching_environ::CONTROL_EFFECT_RESUME_DISCRIMINANT as i64,
+            i64::from(stack_switching_environ::CONTROL_EFFECT_RESUME_DISCRIMINANT),
         );
         let val = builder.ins().ishl_imm(discriminant, 32);
 
@@ -50,7 +50,7 @@ impl ControlEffect {
     ) -> Self {
         let discriminant = builder.ins().iconst(
             I64,
-            stack_switching_environ::CONTROL_EFFECT_SWITCH_DISCRIMINANT as i64,
+            i64::from(stack_switching_environ::CONTROL_EFFECT_SWITCH_DISCRIMINANT),
         );
         let val = builder.ins().ishl_imm(discriminant, 32);
 
@@ -64,7 +64,7 @@ impl ControlEffect {
     ) -> Self {
         let discriminant = builder.ins().iconst(
             I64,
-            stack_switching_environ::CONTROL_EFFECT_SUSPEND_DISCRIMINANT as i64,
+            i64::from(stack_switching_environ::CONTROL_EFFECT_SUSPEND_DISCRIMINANT),
         );
         let val = builder.ins().ishl_imm(discriminant, 32);
         let handler_index = builder.ins().uextend(I64, handler_index);

@@ -1068,7 +1068,10 @@ pub fn translate_ref_test(
             func_env.is_subtype(builder, actual_shared_ty, expected_shared_ty)
         }
         WasmHeapType::ConcreteCont(_) => {
-            unimplemented!("Stack switching feature not compatbile with GC, yet")
+            // TODO(#10248)
+            return Err(wasmtime_environ::WasmError::Unsupported(
+                "Stack switching feature not compatbile with GC, yet".to_string(),
+            ));
         }
     };
     builder.ins().jump(continue_block, &[result]);

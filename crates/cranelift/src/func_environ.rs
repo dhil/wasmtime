@@ -91,7 +91,6 @@ wasmtime_environ::foreach_builtin_function!(declare_function_signatures);
 /// The `FuncEnvironment` implementation for use by the `ModuleEnvironment`.
 pub struct FuncEnvironment<'module_environment> {
     compiler: &'module_environment Compiler,
-    /// NOTE(frank-emrich) pub for use in crate::wasmfx::* modules
     pub(crate) isa: &'module_environment (dyn TargetIsa + 'module_environment),
     pub(crate) module: &'module_environment Module,
     pub(crate) types: &'module_environment ModuleTypesBuilder,
@@ -138,7 +137,6 @@ pub struct FuncEnvironment<'module_environment> {
     /// VMStoreContext` for this function's vmctx argument. This pointer is stored
     /// in the vmctx itself, but never changes for the lifetime of the function,
     /// so if we load it up front we can continue to use it throughout.
-    /// NOTE(frank-emrich) pub for use in stack_switching modules
     pub(crate) vmstore_context_ptr: ir::Value,
 
     /// A cached epoch deadline value, when performing epoch-based
@@ -1719,7 +1717,8 @@ impl<'module_environment> TargetEnvironment for FuncEnvironment<'module_environm
         let needs_stack_map = match wasm_ty.top() {
             WasmHeapTopType::Extern | WasmHeapTopType::Any => true,
             WasmHeapTopType::Func => false,
-            // FIXME(frank-emrich) Don't we actually need to include continuations in stack maps??
+            // TODO(#10248) Once continuations can be stored on the GC heap, we
+            // will need stack maps for continuation objects.
             WasmHeapTopType::Cont => false,
         };
         (ty, needs_stack_map)
@@ -3279,7 +3278,10 @@ impl FuncEnvironment<'_> {
         _tag_index: u32,
         _cont: ir::Value,
     ) -> WasmResult<ir::Value> {
-        todo!()
+        // TODO(#10248)
+        Err(wasmtime_environ::WasmError::Unsupported(
+            "resume.throw instruction not implemented, yet".to_string(),
+        ))
     }
 
     pub fn translate_suspend(
