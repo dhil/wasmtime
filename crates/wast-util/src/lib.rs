@@ -305,10 +305,8 @@ impl Compiler {
                 if config.threads() {
                     return true;
                 }
-                // Unsupported proposals. Note that other proposals have partial
-                // support at this time (pulley is a work-in-progress) and so
-                // individual tests are listed below as "should fail" even if
-                // they're not covered in this list.
+
+                // Stack switching is not supported by Pulley.
                 if config.stack_switching() {
                     return true;
                 }

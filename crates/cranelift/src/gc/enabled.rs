@@ -149,7 +149,10 @@ fn read_field_at_addr(
                     builder.func.dfg.first_result(call_inst)
                 }
                 WasmHeapTopType::Cont => {
-                    unimplemented!("Stack switching feature not compatible with GC, yet")
+                    // TODO(#10248) GC integration for stack switching
+                    return Err(wasmtime_environ::WasmError::Unsupported(
+                        "Stack switching feature not compatbile with GC, yet".to_string(),
+                    ));
                 }
             },
         },
@@ -1068,7 +1071,7 @@ pub fn translate_ref_test(
             func_env.is_subtype(builder, actual_shared_ty, expected_shared_ty)
         }
         WasmHeapType::ConcreteCont(_) => {
-            // TODO(#10248)
+            // TODO(#10248) GC integration for stack switching
             return Err(wasmtime_environ::WasmError::Unsupported(
                 "Stack switching feature not compatbile with GC, yet".to_string(),
             ));

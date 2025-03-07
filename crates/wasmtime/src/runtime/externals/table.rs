@@ -189,7 +189,10 @@ impl Table {
                     }
                 }
 
-                runtime::TableElement::ContRef(_c) => todo!(), // TODO(dhil): Required for the embedder API.
+                runtime::TableElement::ContRef(_c) => {
+                    // TODO(#10248) Required to support stack switching in the embedder API.
+                    unimplemented!()
+                }
             }
         }
     }

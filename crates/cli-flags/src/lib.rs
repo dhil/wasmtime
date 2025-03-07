@@ -1005,9 +1005,6 @@ impl CommonOptions {
             ("gc", gc, wasm_gc)
             ("gc", reference_types, wasm_reference_types)
             ("gc", function_references, wasm_function_references)
-            // FIXME(frank-emrich): If function-references depends on the gc
-            // feature, and stack-switching requires function-references, that
-            // probably means that stack-switching should depend on gc.
             ("stack-switching", stack_switching, wasm_stack_switching)
         }
         Ok(())

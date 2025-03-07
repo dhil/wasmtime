@@ -22,9 +22,7 @@ pub(crate) fn deconstruct<'a>(
 ) -> (ir::Value, ir::Value) {
     debug_assert_eq!(pos.func.dfg.value_type(contobj), POINTER_TYPE);
 
-    let lsbs = pos.ins().ireduce(I64, contobj);
-    let msbs = pos.ins().ushr_imm(contobj, 64);
-    let msbs = pos.ins().ireduce(I64, msbs);
+    let (lsbs, msbs) = pos.ins().isplit(contobj);
 
     let (revision_counter, contref) = match env.isa.endianness() {
         ir::Endianness::Little => (lsbs, msbs),

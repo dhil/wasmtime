@@ -2287,7 +2287,6 @@ impl FuncEnvironment<'_> {
             WasmHeapTopType::Any | WasmHeapTopType::Extern => pos.ins().iconst(types::I32, 0),
             WasmHeapTopType::Cont => {
                 let zero = pos.ins().iconst(self.pointer_type(), 0);
-                // TODO do this nicer
                 stack_switching::fatpointer::construct(self, &mut pos, zero, zero)
             }
         })
