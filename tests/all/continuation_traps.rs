@@ -81,6 +81,7 @@ fn host_trap() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn traps_cross_continuation_stacks_and_host_frames() -> Result<()> {
     let mut config = Config::new();
     config.wasm_stack_switching(true);
@@ -135,6 +136,7 @@ struct CatchState {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn parent_frames_resume_after_host_catches_trap() -> Result<()> {
     let mut config = Config::new();
     config.wasm_stack_switching(true);
