@@ -2921,6 +2921,15 @@ impl FuncEnvironment<'_> {
         gc::translate_exn_throw(self, builder, tag_index, args)
     }
 
+    pub fn translate_exn_new(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        tag_index: TagIndex,
+        args: &[ir::Value],
+    ) -> WasmResult<ir::Value> {
+        gc::translate_exn_new(self, builder, tag_index, args)
+    }
+
     pub fn translate_exn_throw_ref(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5306,6 +5315,26 @@ impl FuncEnvironment<'_> {
             builder,
             type_index,
             exnref,
+            contobj,
+            resumetable,
+        )
+    }
+
+    pub fn translate_resume_throw(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        type_index: u32,
+        tag_index: TagIndex,
+        exception_args: &[ir::Value],
+        contobj: ir::Value,
+        resumetable: &[(u32, Option<ir::Block>)],
+    ) -> WasmResult<Vec<ir::Value>> {
+        stack_switching::instructions::translate_resume_throw(
+            self,
+            builder,
+            type_index,
+            tag_index,
+            exception_args,
             contobj,
             resumetable,
         )

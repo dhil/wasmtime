@@ -1319,6 +1319,10 @@ pub(crate) fn translate_cont_new<'a>(
 #[derive(Clone, Copy)]
 enum ResumePayload<'a> {
     Values(&'a [ir::Value]),
+    Throw {
+        tag_index: TagIndex,
+        args: &'a [ir::Value],
+    },
     ThrowRef(ir::Value),
 }
 
@@ -1354,6 +1358,28 @@ pub(crate) fn translate_resume_throw_ref<'a>(
         type_index,
         resume_contobj,
         ResumePayload::ThrowRef(exnref),
+        resumetable,
+    )
+}
+
+pub(crate) fn translate_resume_throw<'a>(
+    env: &mut crate::func_environ::FuncEnvironment<'a>,
+    builder: &mut FunctionBuilder,
+    type_index: u32,
+    tag_index: TagIndex,
+    exception_args: &[ir::Value],
+    resume_contobj: ir::Value,
+    resumetable: &[(u32, Option<ir::Block>)],
+) -> WasmResult<Vec<ir::Value>> {
+    translate_resume_impl(
+        env,
+        builder,
+        type_index,
+        resume_contobj,
+        ResumePayload::Throw {
+            tag_index,
+            args: exception_args,
+        },
         resumetable,
     )
 }
@@ -1406,7 +1432,9 @@ fn translate_resume_impl<'a>(
     let nontrap_block = builder.create_block();
     let dispatch_block = builder.create_block();
     let throw_blocks = match resume_payload {
-        ResumePayload::ThrowRef(_) => Some((builder.create_block(), builder.create_block())),
+        ResumePayload::Throw { .. } | ResumePayload::ThrowRef(_) => {
+            Some((builder.create_block(), builder.create_block()))
+        }
         ResumePayload::Values(_) => None,
     };
 
@@ -1455,9 +1483,21 @@ fn translate_resume_impl<'a>(
                     vmcontref_store_payloads(env, builder, resume_args, resume_contref);
                 }
             }
-            ResumePayload::ThrowRef(exnref) => {
-                // Validate both operands before consuming the continuation.
-                builder.ins().trapz(exnref, crate::TRAP_NULL_REFERENCE);
+            ResumePayload::Throw { .. } | ResumePayload::ThrowRef(_) => {
+                // Materializing an exception can allocate and fail. Do it
+                // after validating the continuation, but before consuming it.
+                let exnref = match resume_payload {
+                    ResumePayload::Throw { tag_index, args } => {
+                        env.translate_exn_new(builder, tag_index, args)?
+                    }
+                    ResumePayload::ThrowRef(exnref) => {
+                        // Validate both operands before consuming the
+                        // continuation.
+                        builder.ins().trapz(exnref, crate::TRAP_NULL_REFERENCE);
+                        exnref
+                    }
+                    ResumePayload::Values(_) => unreachable!(),
+                };
                 let csi = vmcontref.common_stack_information(env, builder);
                 let was_invoked = csi.was_invoked(env, builder);
                 let _next_revision = vmcontref.incr_revision(env, builder, revision);
@@ -1579,7 +1619,9 @@ fn translate_resume_impl<'a>(
 
         let resume_payload = match resume_payload {
             ResumePayload::Values(_) => ControlEffect::encode_resume(builder),
-            ResumePayload::ThrowRef(_) => ControlEffect::encode_resume_throw(builder),
+            ResumePayload::Throw { .. } | ResumePayload::ThrowRef(_) => {
+                ControlEffect::encode_resume_throw(builder)
+            }
         }
         .to_u64();
 

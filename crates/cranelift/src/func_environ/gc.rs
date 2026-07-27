@@ -711,16 +711,25 @@ pub fn translate_exn_throw(
     tag_index: TagIndex,
     args: &[ir::Value],
 ) -> WasmResult<()> {
+    let exnref = translate_exn_new(func_env, builder, tag_index, args)?;
+    translate_exn_throw_ref(func_env, builder, exnref)
+}
+
+pub fn translate_exn_new(
+    func_env: &mut FuncEnvironment<'_>,
+    builder: &mut FunctionBuilder<'_>,
+    tag_index: TagIndex,
+    args: &[ir::Value],
+) -> WasmResult<ir::Value> {
     let (instance_id, defined_tag_id) = func_env.get_instance_and_tag(builder, tag_index);
-    let exnref = gc_compiler(func_env)?.alloc_exn(
+    gc_compiler(func_env)?.alloc_exn(
         func_env,
         builder,
         tag_index,
         args,
         instance_id,
         defined_tag_id,
-    )?;
-    translate_exn_throw_ref(func_env, builder, exnref)
+    )
 }
 
 pub fn translate_exn_throw_ref(
