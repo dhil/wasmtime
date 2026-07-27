@@ -1,6 +1,6 @@
-;;! stack_switching = true
-;;! reference_types = true
 ;;! bulk_memory = true
+;;! function_references = true
+;;! stack_switching = true
 
 (module
   (type $ft (func))
