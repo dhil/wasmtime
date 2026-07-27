@@ -3241,7 +3241,16 @@ pub fn translate_operator(
         } => {
             // TODO(10248) This depends on exception handling
             return Err(wasmtime_environ::WasmError::Unsupported(
-                "resume.throw instructions not supported, yet".to_string(),
+                "resume_throw instructions not supported, yet".to_string(),
+            ));
+        }
+        Operator::ResumeThrowRef {
+            cont_type_index: _,
+            resume_table: _,
+        } => {
+            // TODO(10248) This depends on exception handling
+            return Err(wasmtime_environ::WasmError::Unsupported(
+                "resume_throw_ref instructions not supported, yet".to_string(),
             ));
         }
         Operator::Switch {
