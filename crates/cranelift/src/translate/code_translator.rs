@@ -3191,7 +3191,7 @@ pub fn translate_operator(
             let param_count = params.len();
 
             let return_values =
-                environ.translate_suspend(builder, tag_index.as_u32(), &params, &return_types);
+                environ.translate_suspend(builder, tag_index.as_u32(), &params, &return_types)?;
 
             environ.stacks.popn(param_count);
             environ.stacks.pushn(&return_values);
@@ -3245,13 +3245,40 @@ pub fn translate_operator(
             ));
         }
         Operator::ResumeThrowRef {
-            cont_type_index: _,
-            resume_table: _,
+            cont_type_index,
+            resume_table: wasm_resume_table,
         } => {
-            // TODO(10248) This depends on exception handling
-            return Err(wasmtime_environ::WasmError::Unsupported(
-                "resume_throw_ref instructions not supported, yet".to_string(),
-            ));
+            let mut clif_resume_table = vec![];
+            for handle in &wasm_resume_table.handlers {
+                match handle {
+                    wasmparser::Handle::OnLabel { tag, label } => {
+                        let i = environ.stacks.control_stack.len() - 1 - (*label as usize);
+                        let frame = &mut environ.stacks.control_stack[i];
+                        frame.set_branched_to_exit();
+                        clif_resume_table.push((*tag, Some(frame.br_destination())));
+                    }
+                    wasmparser::Handle::OnSwitch { tag } => {
+                        clif_resume_table.push((*tag, None));
+                    }
+                }
+            }
+
+            let cont_type_index = TypeIndex::from_u32(*cont_type_index);
+            // The validator leaves the continuation on top of the exception
+            // reference.
+            let operands = environ.stacks.peekn(2);
+            let exnref = operands[0];
+            let contobj = operands[1];
+            let cont_return_vals = environ.translate_resume_throw_ref(
+                builder,
+                cont_type_index.as_u32(),
+                exnref,
+                contobj,
+                &clif_resume_table,
+            )?;
+
+            environ.stacks.popn(2);
+            environ.stacks.pushn(&cont_return_vals);
         }
         Operator::Switch {
             cont_type_index,

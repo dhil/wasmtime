@@ -729,15 +729,36 @@ pub fn translate_exn_throw_ref(
     exnref: ir::Value,
 ) -> WasmResult<()> {
     let builtin = func_env.builtin_functions.throw_ref(builder.func);
+    let vmctx = func_env.vmctx_val(&mut builder.cursor());
+    translate_throwing_builtin(func_env, builder, builtin, &[vmctx, exnref])
+}
+
+/// Re-raise the exception currently pending in the VM context.
+///
+/// Continuation stacks catch native unwinding at their array-call boundary.
+/// When control returns to a parent continuation, this emits a new throwing
+/// callsite with that parent's Wasm exception handlers attached.
+pub fn translate_raise(
+    func_env: &mut FuncEnvironment<'_>,
+    builder: &mut FunctionBuilder<'_>,
+) -> WasmResult<()> {
+    let builtin = func_env.builtin_functions.raise(builder.func);
+    let vmctx = func_env.vmctx_val(&mut builder.cursor());
+    translate_throwing_builtin(func_env, builder, builtin, &[vmctx])
+}
+
+fn translate_throwing_builtin(
+    func_env: &mut FuncEnvironment<'_>,
+    builder: &mut FunctionBuilder<'_>,
+    builtin: ir::FuncRef,
+    args: &[ir::Value],
+) -> WasmResult<()> {
     let sig = builder.func.dfg.ext_funcs[builtin].signature;
     let vmctx = func_env.vmctx_val(&mut builder.cursor());
 
-    // Generate a `try_call` with handlers from the current
-    // stack. This libcall is unique among libcall implementations of
-    // opcodes: we know the others will not throw, but `throw_ref`'s
-    // entire purpose is to throw. So if there are any handlers in the
-    // local function body, we need to attach them to this callsite
-    // like any other.
+    // Generate a `try_call` with handlers from the current stack. Both
+    // `throw_ref` and `raise` deliberately throw, so local Wasm handlers must
+    // be attached to these callsites like they are to ordinary throwing calls.
     let continuation = builder.create_block();
     let current_block = builder.current_block().unwrap();
     builder.insert_block_after(continuation, current_block);
@@ -756,7 +777,7 @@ pub fn translate_exn_throw_ref(
     let etd = ExceptionTableData::new(sig, continuation_call, table_items);
     let et = builder.func.dfg.exception_tables.push(etd);
 
-    builder.ins().try_call(builtin, &[vmctx, exnref], et);
+    builder.ins().try_call(builtin, args, et);
 
     builder.switch_to_block(continuation);
     builder.seal_block(continuation);

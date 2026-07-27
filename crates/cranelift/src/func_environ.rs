@@ -2929,6 +2929,10 @@ impl FuncEnvironment<'_> {
         gc::translate_exn_throw_ref(self, builder, exnref)
     }
 
+    pub fn translate_raise(&mut self, builder: &mut FunctionBuilder<'_>) -> WasmResult<()> {
+        gc::translate_raise(self, builder)
+    }
+
     pub fn translate_array_new(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -5289,13 +5293,31 @@ impl FuncEnvironment<'_> {
         )
     }
 
+    pub fn translate_resume_throw_ref(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        type_index: u32,
+        exnref: ir::Value,
+        contobj: ir::Value,
+        resumetable: &[(u32, Option<ir::Block>)],
+    ) -> WasmResult<Vec<ir::Value>> {
+        stack_switching::instructions::translate_resume_throw_ref(
+            self,
+            builder,
+            type_index,
+            exnref,
+            contobj,
+            resumetable,
+        )
+    }
+
     pub fn translate_suspend(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         tag_index: u32,
         suspend_args: &[ir::Value],
         tag_return_types: &[ir::Type],
-    ) -> Vec<ir::Value> {
+    ) -> WasmResult<Vec<ir::Value>> {
         stack_switching::instructions::translate_suspend(
             self,
             builder,

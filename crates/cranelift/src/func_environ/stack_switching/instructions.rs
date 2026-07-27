@@ -1316,12 +1316,54 @@ pub(crate) fn translate_cont_new<'a>(
     Ok(contobj)
 }
 
+#[derive(Clone, Copy)]
+enum ResumePayload<'a> {
+    Values(&'a [ir::Value]),
+    ThrowRef(ir::Value),
+}
+
 pub(crate) fn translate_resume<'a>(
     env: &mut crate::func_environ::FuncEnvironment<'a>,
     builder: &mut FunctionBuilder,
     type_index: u32,
     resume_contobj: ir::Value,
     resume_args: &[ir::Value],
+    resumetable: &[(u32, Option<ir::Block>)],
+) -> WasmResult<Vec<ir::Value>> {
+    translate_resume_impl(
+        env,
+        builder,
+        type_index,
+        resume_contobj,
+        ResumePayload::Values(resume_args),
+        resumetable,
+    )
+}
+
+pub(crate) fn translate_resume_throw_ref<'a>(
+    env: &mut crate::func_environ::FuncEnvironment<'a>,
+    builder: &mut FunctionBuilder,
+    type_index: u32,
+    exnref: ir::Value,
+    resume_contobj: ir::Value,
+    resumetable: &[(u32, Option<ir::Block>)],
+) -> WasmResult<Vec<ir::Value>> {
+    translate_resume_impl(
+        env,
+        builder,
+        type_index,
+        resume_contobj,
+        ResumePayload::ThrowRef(exnref),
+        resumetable,
+    )
+}
+
+fn translate_resume_impl<'a>(
+    env: &mut crate::func_environ::FuncEnvironment<'a>,
+    builder: &mut FunctionBuilder,
+    type_index: u32,
+    resume_contobj: ir::Value,
+    resume_payload: ResumePayload<'_>,
     resumetable: &[(u32, Option<ir::Block>)],
 ) -> WasmResult<Vec<ir::Value>> {
     // The resume instruction is the most involved instruction to
@@ -1363,6 +1405,10 @@ pub(crate) fn translate_resume<'a>(
     let trap_block = builder.create_block();
     let nontrap_block = builder.create_block();
     let dispatch_block = builder.create_block();
+    let throw_blocks = match resume_payload {
+        ResumePayload::ThrowRef(_) => Some((builder.create_block(), builder.create_block())),
+        ResumePayload::Values(_) => None,
+    };
 
     let vmctx = env.vmctx_val(&mut builder.cursor());
 
@@ -1400,11 +1446,47 @@ pub(crate) fn translate_resume<'a>(
         builder
             .ins()
             .trapz(evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
-        let _next_revision = vmcontref.incr_revision(env, builder, revision);
 
-        if resume_args.len() > 0 {
-            // We store the arguments in the `VMContRef` to be resumed.
-            vmcontref_store_payloads(env, builder, resume_args, resume_contref);
+        match resume_payload {
+            ResumePayload::Values(resume_args) => {
+                let _next_revision = vmcontref.incr_revision(env, builder, revision);
+                if resume_args.len() > 0 {
+                    // We store the arguments in the `VMContRef` to be resumed.
+                    vmcontref_store_payloads(env, builder, resume_args, resume_contref);
+                }
+            }
+            ResumePayload::ThrowRef(exnref) => {
+                // Validate both operands before consuming the continuation.
+                builder.ins().trapz(exnref, crate::TRAP_NULL_REFERENCE);
+                let csi = vmcontref.common_stack_information(env, builder);
+                let was_invoked = csi.was_invoked(env, builder);
+                let _next_revision = vmcontref.incr_revision(env, builder, revision);
+
+                let (invoked_throw_block, fresh_throw_block) = throw_blocks.unwrap();
+                builder.ins().brif(
+                    was_invoked,
+                    invoked_throw_block,
+                    &[],
+                    fresh_throw_block,
+                    &[],
+                );
+
+                // A fresh continuation has not entered its Wasm function yet.
+                // Throwing into its initial suspension point therefore
+                // terminates it without executing any of its body.
+                builder.switch_to_block(fresh_throw_block);
+                builder.seal_block(fresh_throw_block);
+                builder.set_cold_block(fresh_throw_block);
+                csi.set_state_trapped(env, builder);
+                vmcontref.args(env, builder).clear(env, builder, true);
+                vmcontref.values(env, builder).clear(env, builder, true);
+                env.translate_exn_throw_ref(builder, exnref)?;
+
+                builder.switch_to_block(invoked_throw_block);
+                builder.seal_block(invoked_throw_block);
+                let values = vmcontref.values(env, builder);
+                values.store_data_entries(env, builder, &[exnref]);
+            }
         }
 
         // Splice together stack chains:
@@ -1495,7 +1577,11 @@ pub(crate) fn translate_resume<'a>(
             parent_csi.set_first_switch_handler_index(env, builder, first_switch_handler_index);
         }
 
-        let resume_payload = ControlEffect::encode_resume(builder).to_u64();
+        let resume_payload = match resume_payload {
+            ResumePayload::Values(_) => ControlEffect::encode_resume(builder),
+            ResumePayload::ThrowRef(_) => ControlEffect::encode_resume_throw(builder),
+        }
+        .to_u64();
 
         // Note that the control context we use for switching is not the one in
         // (the stack of) resume_contref, but in (the stack of) last_ancestor!
@@ -1568,14 +1654,7 @@ pub(crate) fn translate_resume<'a>(
         let values = trapped_continuation.values(env, builder);
         values.clear(env, builder, true);
 
-        let raise = env.builtin_functions.raise(&mut builder.func);
-        builder.ins().call(raise, &[vmctx]);
-        // We do not anticipate the call to `raise`
-        // returning. However, viewed through cranelift's lens it is
-        // not a block terminating instruction, therefore we insert a
-        // trap to make the current block structurally complete and
-        // catch any unexpected returns from `raise`.
-        builder.ins().trap(crate::TRAP_INTERNAL_ASSERT);
+        env.translate_raise(builder)?;
     }
 
     // The suspend block: Only used when we suspended, not for returns.
@@ -1725,13 +1804,45 @@ pub(crate) fn translate_resume<'a>(
     }
 }
 
+fn load_resume_values_or_throw<'a>(
+    env: &mut crate::func_environ::FuncEnvironment<'a>,
+    builder: &mut FunctionBuilder,
+    result: ControlEffect,
+    continuation: helpers::VMContRef,
+    return_types: &[ir::Type],
+) -> WasmResult<Vec<ir::Value>> {
+    let throw_block = builder.create_block();
+    let values_block = builder.create_block();
+    let is_resume_throw = result.is_resume_throw(builder);
+    builder
+        .ins()
+        .brif(is_resume_throw, throw_block, &[], values_block, &[]);
+
+    builder.switch_to_block(throw_block);
+    builder.seal_block(throw_block);
+    builder.set_cold_block(throw_block);
+    let values = continuation.values(env, builder);
+    // Exception references use Wasmtime's compressed, 32-bit GC-reference
+    // representation.
+    let exnref = values.load_data_entries(env, builder, &[I32])[0];
+    values.clear(env, builder, true);
+    env.translate_exn_throw_ref(builder, exnref)?;
+
+    builder.switch_to_block(values_block);
+    builder.seal_block(values_block);
+    let values = continuation.values(env, builder);
+    let return_values = values.load_data_entries(env, builder, return_types);
+    values.clear(env, builder, true);
+    Ok(return_values)
+}
+
 pub(crate) fn translate_suspend<'a>(
     env: &mut crate::func_environ::FuncEnvironment<'a>,
     builder: &mut FunctionBuilder,
     tag_index: u32,
     suspend_args: &[ir::Value],
     tag_return_types: &[ir::Type],
-) -> Vec<ir::Value> {
+) -> WasmResult<Vec<ir::Value>> {
     let tag_addr = tag_address(env, builder, tag_index);
 
     let vmctx = env.vmctx_val(&mut builder.cursor());
@@ -1754,18 +1865,18 @@ pub(crate) fn translate_suspend<'a>(
     // 1. The suspend arguments
     // 2. Afterwards, the tag return values
     let values = active_contref.values(env, builder);
-    let required_capacity =
-        u32::try_from(std::cmp::max(suspend_args.len(), tag_return_types.len()))
-            .expect("Number of stack switching payloads should fit in u32");
+    let required_capacity = u32::try_from(std::cmp::max(
+        1,
+        std::cmp::max(suspend_args.len(), tag_return_types.len()),
+    ))
+    .expect("Number of stack switching payloads should fit in u32");
 
-    if required_capacity > 0 {
-        env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
-            env,
-            builder,
-            required_capacity,
-            env.stack_switching_values_buffer,
-        ));
-    }
+    env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
+        env,
+        builder,
+        required_capacity,
+        env.stack_switching_values_buffer,
+    ));
 
     if suspend_args.len() > 0 {
         values.store_data_entries(env, builder, suspend_args);
@@ -1787,17 +1898,20 @@ pub(crate) fn translate_suspend<'a>(
     let fiber_stack = end_of_chain_contref.get_fiber_stack(env, builder);
     let control_context_ptr = fiber_stack.load_control_context(env, builder);
 
-    builder
-        .ins()
-        .stack_switch(control_context_ptr, control_context_ptr, suspend_payload);
+    let result =
+        builder
+            .ins()
+            .stack_switch(control_context_ptr, control_context_ptr, suspend_payload);
 
-    // The return values of the suspend instruction are the tag return values, saved in the `args` buffer.
-    let values = active_contref.values(env, builder);
-    let return_values = values.load_data_entries(env, builder, tag_return_types);
-    // We effectively consume the values and discard the stack allocated buffer.
-    values.clear(env, builder, true);
-
-    return_values
+    // A normal resume supplies the tag's return values. `resume_throw_ref`
+    // supplies an exception reference and throws it at this suspension point.
+    load_resume_values_or_throw(
+        env,
+        builder,
+        ControlEffect::from_u64(result),
+        active_contref,
+        tag_return_types,
+    )
 }
 
 pub(crate) fn translate_switch<'a>(
@@ -1864,15 +1978,13 @@ pub(crate) fn translate_switch<'a>(
         // In the switcher_contref's `values` buffer, stack-allocate enough room so that we can
         // later store `tag_return_types.len()` when resuming the continuation.
         let values = switcher_contref.values(env, builder);
-        let required_capacity = u32::try_from(return_types.len()).unwrap();
-        if required_capacity > 0 {
-            env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
-                env,
-                builder,
-                required_capacity,
-                env.stack_switching_values_buffer,
-            ));
-        }
+        let required_capacity = u32::try_from(std::cmp::max(1, return_types.len())).unwrap();
+        env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
+            env,
+            builder,
+            required_capacity,
+            env.stack_switching_values_buffer,
+        ));
 
         let switcher_contref_csi = switcher_contref.common_stack_information(env, builder);
         switcher_contref_csi.set_state_suspended(env, builder);
@@ -1937,7 +2049,7 @@ pub(crate) fn translate_switch<'a>(
     }
 
     // Perform actual stack switch
-    {
+    let result = {
         let switcher_last_ancestor_fs =
             switcher_contref_last_ancestor.get_fiber_stack(env, builder);
         let switcher_last_ancestor_cc =
@@ -2035,22 +2147,20 @@ pub(crate) fn translate_switch<'a>(
 
         let switch_payload = ControlEffect::encode_switch(builder).to_u64();
 
-        let _result = builder.ins().stack_switch(
+        builder.ins().stack_switch(
             switcher_last_ancestor_cc,
             tmp_control_context,
             switch_payload,
-        );
-    }
-
-    // After switching back to the original stack: Load return values, they are
-    // stored on the switcher continuation.
-    let return_values = {
-        let payloads = switcher_contref.values(env, builder);
-        let return_values = payloads.load_data_entries(env, builder, return_types);
-        // We consume the values and discard the buffer (allocated on this stack)
-        payloads.clear(env, builder, true);
-        return_values
+        )
     };
 
-    Ok(return_values)
+    // After switching back to the original stack, either load the values
+    // supplied by an ordinary resume or throw the injected exception.
+    load_resume_values_or_throw(
+        env,
+        builder,
+        ControlEffect::from_u64(result),
+        switcher_contref,
+        return_types,
+    )
 }
