@@ -13,7 +13,10 @@
 //! 0xAfe0 +-----------------------+
 //!        | args buffer, size:    |
 //!        | (16 * args_capacity)  |
-//! 0xAfc0 +-----------------------+   <- below: beginning of usable stack space
+//! 0xAfc0 +-----------------------+
+//!        | optional GC-reference |
+//!        | markers (16B-aligned) |
+//! 0xAfb0 +-----------------------+   <- below: beginning of usable stack space
 //!        |                       |      (16-byte aligned)
 //!        |                       |
 //!        ~        ...            ~   <- actual native stack space to use
@@ -194,11 +197,14 @@ impl VMContinuationStack {
     /// calls `fiber_start` with  the following arguments:
     /// TOS, func_ref, caller_vmctx, args_ptr, args_capacity
     ///
-    /// Note that at this point we also allocate the args buffer
+    /// Note that at this point we also allocate the args buffer and, when
+    /// `GC_REFS` is true, its parallel GC-reference-marker buffer
     /// (see picture at the top of this file).
     /// We define `args_capacity` as the max of parameter and return value count.
-    /// Then the size s of the actual buffer size is calculated as follows:
-    /// s = size_of(ValRaw) * `args_capacity`,
+    /// Their combined, 16-byte-aligned size `s` is calculated as follows when
+    /// `GC_REFS` is true:
+    /// s = size_of(ValRaw) * `args_capacity`
+    ///   + align_up(`args_capacity`, 16),
     ///
     /// Note that this value is used below, and we may have s = 0.
     ///
@@ -215,7 +221,7 @@ impl VMContinuationStack {
     ///       -0x20     | args_capacity
     ///
     ///
-    /// The data stored behind the args buffer is as follows:
+    /// The startup data stored behind the buffer(s) is as follows:
     ///
     ///  Offset from    |
     ///       TOS       | Contents
@@ -224,11 +230,12 @@ impl VMContinuationStack {
     ///       -0x30 - s | caller_vmctx
     ///       -0x38 - s | args (of type *mut ArrayRef<ValRaw>)
     ///       -0x40 - s | return_value_count
-    pub fn initialize(
+    pub fn initialize<const GC_REFS: bool>(
         &self,
         func_ref: *const VMFuncRef,
         caller_vmctx: *mut VMContext,
         args: *mut VMHostArray<ValRaw>,
+        #[cfg(feature = "gc")] args_gc_ref_data: &mut *mut u8,
         parameter_count: u32,
         return_value_count: u32,
     ) -> Result<()> {
@@ -246,17 +253,44 @@ impl VMContinuationStack {
             debug_assert_eq!(args_ref.capacity, 0);
             debug_assert_eq!(args_ref.length, 0);
 
-            let total_control_size = usize::try_from(args_capacity)?
+            let args_data_size = usize::try_from(args_capacity)?
                 .checked_mul(std::mem::size_of::<ValRaw>())
-                .and_then(|s| s.checked_add(0x40))
                 .ok_or_else(|| {
                     format_err!(
                         "continuation function type with {args_capacity} args \
                          overflows stack control data size calculation"
                     )
                 })?;
-            let args_data_size = total_control_size - 0x40;
-
+            // Keep the fixed startup data 16-byte aligned.
+            let gc_refs_data_size = if cfg!(feature = "gc") && GC_REFS {
+                usize::try_from(args_capacity)?
+                    .checked_add(15)
+                    .map(|s| s & !15)
+                    .ok_or_else(|| {
+                        format_err!(
+                            "continuation function type with {args_capacity} args \
+                             overflows stack control data size calculation"
+                        )
+                    })?
+            } else {
+                0
+            };
+            let dynamic_data_size = args_data_size
+                .checked_add(gc_refs_data_size)
+                .ok_or_else(|| {
+                    format_err!(
+                        "continuation function type with {args_capacity} args \
+                         overflows stack control data size calculation"
+                    )
+                })?;
+            let total_control_size = dynamic_data_size
+                .checked_add(0x40)
+                .ok_or_else(|| {
+                    format_err!(
+                        "continuation function type with {args_capacity} args \
+                         overflows stack control data size calculation"
+                    )
+                })?;
             // Ensure the control data (fixed header + args buffer) fits
             // within the usable stack space. For Mmap allocations,
             // self.len includes the guard page, which is not writable.
@@ -279,9 +313,20 @@ impl VMContinuationStack {
             } else {
                 tos.sub(0x20 + args_data_size)
             };
-
             args_ref.capacity = args_capacity;
             args_ref.data = args_data_ptr.cast::<ValRaw>();
+            #[cfg(feature = "gc")]
+            if GC_REFS {
+                let data = if args_capacity == 0 {
+                    ptr::null_mut()
+                } else {
+                    tos.sub(0x20 + dynamic_data_size)
+                };
+                if args_capacity > 0 {
+                    data.write_bytes(0, usize::try_from(args_capacity)?);
+                }
+                *args_gc_ref_data = data;
+            }
 
             let to_store = [
                 // Data near top of stack:
@@ -290,10 +335,13 @@ impl VMContinuationStack {
                 (0x18, tos.sub(total_control_size).addr()),
                 (0x20, usize::try_from(args_capacity)?),
                 // Data after the args buffer:
-                (0x28 + args_data_size, func_ref.addr()),
-                (0x30 + args_data_size, caller_vmctx.addr()),
-                (0x38 + args_data_size, args.addr()),
-                (0x40 + args_data_size, usize::try_from(return_value_count)?),
+                (0x28 + dynamic_data_size, func_ref.addr()),
+                (0x30 + dynamic_data_size, caller_vmctx.addr()),
+                (0x38 + dynamic_data_size, args.addr()),
+                (
+                    0x40 + dynamic_data_size,
+                    usize::try_from(return_value_count)?,
+                ),
             ];
 
             for (offset, data) in to_store {

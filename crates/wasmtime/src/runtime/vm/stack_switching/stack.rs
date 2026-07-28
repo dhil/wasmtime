@@ -96,21 +96,26 @@ impl VMContinuationStack {
     /// by `func_ref`. `parameter_count` and `return_value_count` must be the
     /// corresponding number of parameters and return values of `func_ref`.
     /// `args` must point to the `args` field of the `VMContRef` owning this pointer.
+    /// When `GC_REFS` is true, `args_gc_ref_data` receives the corresponding
+    /// root-marker buffer.
     ///
     /// It will be updated by this function to correctly describe
     /// the buffer used by this function for its arguments and return values.
-    pub fn initialize(
+    pub fn initialize<const GC_REFS: bool>(
         &self,
         func_ref: *const VMFuncRef,
         caller_vmctx: *mut VMContext,
         args: *mut VMHostArray<ValRaw>,
+        #[cfg(feature = "gc")] args_gc_ref_data: &mut *mut u8,
         parameter_count: u32,
         return_value_count: u32,
     ) -> Result<()> {
-        self.0.initialize(
+        self.0.initialize::<GC_REFS>(
             func_ref,
             caller_vmctx,
             args,
+            #[cfg(feature = "gc")]
+            args_gc_ref_data,
             parameter_count,
             return_value_count,
         )

@@ -1119,9 +1119,25 @@ fn cont_new(
     func: *mut u8,
     param_count: u32,
     result_count: u32,
+    gc_refs: u32,
 ) -> Result<Option<AllocationSize>> {
-    let ans =
-        crate::vm::stack_switching::cont_new(store, instance, func, param_count, result_count)?;
+    let ans = if gc_refs != 0 {
+        crate::vm::stack_switching::cont_new::<true>(
+            store,
+            instance,
+            func,
+            param_count,
+            result_count,
+        )?
+    } else {
+        crate::vm::stack_switching::cont_new::<false>(
+            store,
+            instance,
+            func,
+            param_count,
+            result_count,
+        )?
+    };
     Ok(Some(AllocationSize(ans.cast::<u8>() as usize)))
 }
 

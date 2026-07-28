@@ -154,7 +154,7 @@ macro_rules! foreach_builtin_function {
 
             // Creates a new continuation from a funcref.
             #[cfg(feature = "stack-switching")]
-            cont_new(vmctx: vmctx, r: pointer, param_count: u32, result_count: u32) -> pointer;
+            cont_new(vmctx: vmctx, r: pointer, param_count: u32, result_count: u32, gc_refs: u32) -> pointer;
 
             // Return the instance ID for a given vmctx.
             #[cfg(feature = "gc")]

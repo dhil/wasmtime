@@ -587,6 +587,16 @@ pub trait PtrSize {
         self.vmcontref_args() + self.size_of_vmhostarray()
     }
 
+    /// Return the offset of `VMContRef::args_gc_ref_data`.
+    fn vmcontref_args_gc_ref_data(&self) -> u8 {
+        self.vmcontref_values() + self.size_of_vmhostarray()
+    }
+
+    /// Return the offset of `VMContRef::values_gc_ref_data`.
+    fn vmcontref_values_gc_ref_data(&self) -> u8 {
+        self.vmcontref_args_gc_ref_data() + self.size()
+    }
+
     /// Return the offset to the `magic` value in this `VMContext`.
     #[inline]
     fn vmctx_magic(&self) -> u8 {

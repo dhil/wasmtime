@@ -221,6 +221,10 @@ pub struct FuncEnvironment<'module_environment> {
     /// current continuation's `values` field.
     stack_switching_values_buffer: Option<ir::StackSlot>,
 
+    /// The stack slot containing the GC-reference markers corresponding to
+    /// `stack_switching_values_buffer`.
+    stack_switching_values_gc_refs_buffer: Option<ir::StackSlot>,
+
     /// The stack-slot used for exposing Wasm state via debug
     /// instrumentation, if any, and the builder containing its metadata.
     pub(crate) state_slot: Option<(ir::StackSlot, FrameStateSlotBuilder)>,
@@ -301,6 +305,7 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
 
             stack_switching_handler_list_buffer: None,
             stack_switching_values_buffer: None,
+            stack_switching_values_gc_refs_buffer: None,
 
             state_slot: None,
             next_srcloc: ir::SourceLoc::default(),
@@ -5473,8 +5478,9 @@ impl FuncEnvironment<'_> {
         builder: &mut FunctionBuilder<'_>,
         contobj: ir::Value,
         args: &[ir::Value],
+        arg_types: &[WasmValType],
     ) -> ir::Value {
-        stack_switching::instructions::translate_cont_bind(self, builder, contobj, args)
+        stack_switching::instructions::translate_cont_bind(self, builder, contobj, args, arg_types)
     }
 
     pub fn translate_cont_new(
@@ -5554,13 +5560,15 @@ impl FuncEnvironment<'_> {
         builder: &mut FunctionBuilder<'_>,
         tag_index: u32,
         suspend_args: &[ir::Value],
-        tag_return_types: &[ir::Type],
+        suspend_arg_types: &[WasmValType],
+        tag_return_types: &[WasmValType],
     ) -> WasmResult<Vec<ir::Value>> {
         stack_switching::instructions::translate_suspend(
             self,
             builder,
             tag_index,
             suspend_args,
+            suspend_arg_types,
             tag_return_types,
         )
     }
@@ -5572,7 +5580,8 @@ impl FuncEnvironment<'_> {
         tag_index: u32,
         contobj: ir::Value,
         switch_args: &[ir::Value],
-        return_types: &[ir::Type],
+        switch_arg_types: &[WasmValType],
+        return_types: &[WasmValType],
     ) -> WasmResult<Vec<ir::Value>> {
         stack_switching::instructions::translate_switch(
             self,
@@ -5580,6 +5589,7 @@ impl FuncEnvironment<'_> {
             tag_index,
             contobj,
             switch_args,
+            switch_arg_types,
             return_types,
         )
     }

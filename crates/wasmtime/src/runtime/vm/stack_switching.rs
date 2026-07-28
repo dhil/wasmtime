@@ -242,6 +242,18 @@ pub struct VMContRef {
     /// to) is always allocated on this continuation's stack.
     pub values: VMPayloads,
 
+    /// A byte for each slot in `args`, identifying slots that contain
+    /// GC-managed references. Null when this continuation's arguments cannot
+    /// contain such references.
+    #[cfg(feature = "gc")]
+    pub args_gc_ref_data: *mut u8,
+
+    /// A byte for each slot in `values`, identifying slots that contain
+    /// GC-managed references. Null unless the current suspension can exchange
+    /// such references.
+    #[cfg(feature = "gc")]
+    pub values_gc_ref_data: *mut u8,
+
     /// Tell the compiler that this structure has potential self-references
     /// through the `last_ancestor` pointer.
     _marker: core::marker::PhantomPinned,
@@ -273,6 +285,10 @@ impl VMContRef {
         let stack = VMContinuationStack::unallocated();
         let args = VMPayloads::empty();
         let values = VMPayloads::empty();
+        #[cfg(feature = "gc")]
+        let args_gc_ref_data = core::ptr::null_mut();
+        #[cfg(feature = "gc")]
+        let values_gc_ref_data = core::ptr::null_mut();
         let revision = 0;
         let _marker = PhantomPinned;
 
@@ -283,6 +299,10 @@ impl VMContRef {
             stack,
             args,
             values,
+            #[cfg(feature = "gc")]
+            args_gc_ref_data,
+            #[cfg(feature = "gc")]
+            values_gc_ref_data,
             revision,
             _marker,
         }
@@ -310,7 +330,7 @@ unsafe impl Sync for VMContRef {}
 /// Implements `cont.new` instructions (i.e., creation of continuations).
 #[cfg(feature = "stack-switching")]
 #[inline(always)]
-pub fn cont_new(
+pub fn cont_new<const GC_REFS: bool>(
     store: &mut dyn crate::vm::VMStore,
     instance: crate::store::InstanceId,
     func: *mut u8,
@@ -334,11 +354,12 @@ pub fn cont_new(
     // The initialization function will allocate the actual args/return value buffer and
     // update this object (if needed).
     let contref_args_ptr = &mut contref.args as *mut _ as *mut VMHostArray<crate::ValRaw>;
-
-    contref.stack.initialize(
+    contref.stack.initialize::<GC_REFS>(
         func.cast::<crate::vm::VMFuncRef>(),
         caller_vmctx.as_ptr(),
         contref_args_ptr,
+        #[cfg(feature = "gc")]
+        &mut contref.args_gc_ref_data,
         param_count,
         result_count,
     )?;
@@ -701,6 +722,16 @@ mod tests {
         assert_eq!(
             offset_of!(VMContRef, values),
             usize::from(offsets.ptr.vmcontref_values())
+        );
+        #[cfg(feature = "gc")]
+        assert_eq!(
+            offset_of!(VMContRef, args_gc_ref_data),
+            usize::from(offsets.ptr.vmcontref_args_gc_ref_data())
+        );
+        #[cfg(feature = "gc")]
+        assert_eq!(
+            offset_of!(VMContRef, values_gc_ref_data),
+            usize::from(offsets.ptr.vmcontref_values_gc_ref_data())
         );
     }
 
