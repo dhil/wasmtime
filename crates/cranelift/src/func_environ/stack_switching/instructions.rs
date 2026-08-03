@@ -8,7 +8,10 @@ use cranelift_codegen::ir::{self, MemFlagsData};
 use cranelift_codegen::ir::{Block, BlockCall, InstBuilder, JumpTableData};
 use cranelift_frontend::FunctionBuilder;
 use itertools::{Either, Itertools};
-use wasmtime_environ::{PtrSize, TagIndex, TypeIndex, WasmResult, WasmValType, wasm_unsupported};
+use wasmtime_environ::{
+    PtrSize, TagIndex, TypeIndex, WasmHeapType, WasmRefType, WasmResult, WasmValType,
+    wasm_unsupported,
+};
 
 fn control_context_size(triple: &target_lexicon::Triple) -> WasmResult<u8> {
     match (triple.architecture, triple.operating_system) {
@@ -31,7 +34,7 @@ pub(crate) mod stack_switching_helpers {
     use cranelift_codegen::ir::types::*;
     use cranelift_codegen::ir::{StackSlot, StackSlotKind::*};
     use cranelift_frontend::FunctionBuilder;
-    use wasmtime_environ::PtrSize;
+    use wasmtime_environ::{PtrSize, WasmValType};
 
     /// Provides information about the layout of a type when it is used as an
     /// element in a host array. This is used for `VMHostArrayRef`.
@@ -431,13 +434,13 @@ pub(crate) mod stack_switching_helpers {
         }
 
         /// Loads n entries from this Vector object, where n is the length of
-        /// `load_types`, which also gives the types of the values to load.
+        /// `load_types`, which also gives the Wasm types of the values to load.
         /// Loading starts at index 0 of the Vector object.
         pub fn load_data_entries<'a>(
             &self,
             env: &mut crate::func_environ::FuncEnvironment<'a>,
             builder: &mut FunctionBuilder,
-            load_types: &[ir::Type],
+            load_types: &[WasmValType],
         ) -> Vec<ir::Value> {
             let region = env
                 .alias_regions
@@ -448,10 +451,14 @@ pub(crate) mod stack_switching_helpers {
             let mut values = vec![];
             let mut offset = 0;
             let (_align, entry_size) = T::vmhostarray_entry_layout(&env.offsets.ptr);
-            for valtype in load_types {
+            for wasm_ty in load_types {
+                let valtype = crate::value_type(env.isa(), *wasm_ty);
                 let val = builder
                     .ins()
-                    .load(*valtype, memflags, data_start_pointer, offset);
+                    .load(valtype, memflags, data_start_pointer, offset);
+                if env.val_ty_needs_stack_map(*wasm_ty) {
+                    builder.declare_value_needs_stack_map(val);
+                }
                 values.push(val);
                 offset += i32::try_from(entry_size).unwrap();
             }
@@ -1891,11 +1898,7 @@ fn translate_resume_impl<'a>(
             preamble_blocks.push(preamble_block);
             builder.switch_to_block(preamble_block);
 
-            let param_types = env.tag_params(TagIndex::from_u32(handle_tag));
-            let param_types: Vec<ir::Type> = param_types
-                .iter()
-                .map(|wty| crate::value_type(env.isa(), *wty))
-                .collect();
+            let param_types = env.tag_params(TagIndex::from_u32(handle_tag)).to_vec();
 
             let values = suspended_contref.values(env, builder);
             let mut suspend_args: Vec<ir::Value> =
@@ -1960,11 +1963,9 @@ fn translate_resume_impl<'a>(
         returned_csi.set_state_returned(env, builder);
 
         // Load the values returned by the continuation.
-        let return_types: Vec<_> = env
+        let return_types = env
             .continuation_returns(TypeIndex::from_u32(type_index))
-            .iter()
-            .map(|ty| crate::value_type(env.isa(), *ty))
-            .collect();
+            .to_vec();
         let payloads = returned_contref.args(env, builder);
         let return_values = payloads.load_data_entries(env, builder, &return_types);
         payloads.clear(env, builder, true);
@@ -1993,18 +1994,18 @@ fn load_resume_values_or_throw<'a>(
     let values = continuation.values(env, builder);
     // Exception references use Wasmtime's compressed, 32-bit GC-reference
     // representation.
-    let exnref = values.load_data_entries(env, builder, &[I32])[0];
+    let exnref_ty = WasmValType::Ref(WasmRefType {
+        nullable: false,
+        heap_type: WasmHeapType::Exn,
+    });
+    let exnref = values.load_data_entries(env, builder, &[exnref_ty])[0];
     values.clear(env, builder, true);
     gc::translate_exn_throw_ref(env, builder, exnref)?;
 
     builder.switch_to_block(values_block);
     builder.seal_block(values_block);
     let values = continuation.values(env, builder);
-    let return_types: Vec<_> = return_types
-        .iter()
-        .map(|ty| crate::value_type(env.isa(), *ty))
-        .collect();
-    let return_values = values.load_data_entries(env, builder, &return_types);
+    let return_values = values.load_data_entries(env, builder, return_types);
     values.clear(env, builder, true);
     Ok(return_values)
 }
