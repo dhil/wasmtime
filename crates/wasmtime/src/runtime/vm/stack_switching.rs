@@ -50,7 +50,7 @@ pub const CONTROL_EFFECT_TRAP_ENCODING: u64 =
 /// (i.e., the one pointed to by the VMContObj) has a pointer to the
 /// other end of the chain (i.e., its last ancestor).
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VMContObj {
     pub contref: NonNull<VMContRef>,
     pub revision: usize,

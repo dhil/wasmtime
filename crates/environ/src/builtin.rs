@@ -170,6 +170,25 @@ macro_rules! foreach_builtin_function {
 
             // Process a debug breakpoint.
             breakpoint(vmctx: vmctx) -> bool;
+
+            // Intern a continuation reference into the GC heap's side table.
+            // The complete pointer-and-revision value is represented by a
+            // four-byte ID inside GC objects.
+            #[cfg(all(feature = "gc", feature = "stack-switching"))]
+            intern_contref_for_gc_heap(
+                vmctx: vmctx,
+                contref: pointer,
+                revision: pointer
+            ) -> u64;
+
+            // Resolve an interned continuation-reference ID and write its
+            // pointer and revision witness to `result`.
+            #[cfg(all(feature = "gc", feature = "stack-switching"))]
+            get_interned_contref(
+                vmctx: vmctx,
+                contref_id: u32,
+                result: pointer
+            ) -> bool;
         }
     };
 }
@@ -378,6 +397,7 @@ impl BuiltinFunctionIndex {
             (@get ref_func pointer) => (return None);
             (@get table_get_lazy_init_func_ref pointer) => (return None);
             (@get intern_func_ref_for_gc_heap u64) => (return None);
+            (@get intern_contref_for_gc_heap u64) => (return None);
             (@get is_subtype u32) => (return None);
             (@get ceil_f32 f32) => (return None);
             (@get ceil_f64 f64) => (return None);

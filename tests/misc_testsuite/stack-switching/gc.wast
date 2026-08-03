@@ -145,13 +145,119 @@
 
 (assert_return (invoke "bound-suspended-argument") (i32.const 91))
 
-(assert_invalid
-  (module
-    (type $f (func))
-    (type $c (cont $f))
-    (type $s (struct (field (ref null $c))))
-    (func (export "run")
-      (drop (struct.new_default $s))
-    )
-  )
-  "Stack switching feature not compatible with GC")
+;; Struct and array fields store continuation references through a store-local
+;; side table. Collection may run while the aggregate is the only place that
+;; retains the continuation object.
+(module
+  (type $f (func (result i32)))
+  (type $c (cont $f))
+  (type $holder (struct (field (mut (ref null $c)))))
+  (type $array (array (mut (ref null $c))))
+
+  (import "wasmtime" "gc" (func $gc))
+
+  (func $forty-two (result i32)
+    (i32.const 42))
+  (elem declare func $forty-two)
+
+  (func (export "struct-initialize") (result i32)
+    (local $holder (ref $holder))
+    (local.set $holder
+      (struct.new $holder
+        (cont.new $c (ref.func $forty-two))))
+    (call $gc)
+    (resume $c
+      (ref.as_non_null
+        (struct.get $holder 0 (local.get $holder)))))
+
+  (func (export "struct-update") (result i32)
+    (local $holder (ref $holder))
+    (local.set $holder (struct.new_default $holder))
+    (struct.set $holder 0
+      (local.get $holder)
+      (cont.new $c (ref.func $forty-two)))
+    (call $gc)
+    (resume $c
+      (ref.as_non_null
+        (struct.get $holder 0 (local.get $holder)))))
+
+  (func (export "array-initialize") (result i32)
+    (local $array (ref $array))
+    (local.set $array
+      (array.new_fixed $array 1
+        (cont.new $c (ref.func $forty-two))))
+    (call $gc)
+    (resume $c
+      (ref.as_non_null
+        (array.get $array (local.get $array) (i32.const 0)))))
+
+  (func (export "array-update") (result i32)
+    (local $array (ref $array))
+    (local.set $array (array.new_default $array (i32.const 1)))
+    (array.set $array
+      (local.get $array)
+      (i32.const 0)
+      (cont.new $c (ref.func $forty-two)))
+    (call $gc)
+    (resume $c
+      (ref.as_non_null
+        (array.get $array (local.get $array) (i32.const 0)))))
+
+  (func (export "array-fill-and-copy") (result i32)
+    (local $source (ref $array))
+    (local $destination (ref $array))
+    (local.set $source (array.new_default $array (i32.const 1)))
+    (local.set $destination (array.new_default $array (i32.const 1)))
+    (array.fill $array
+      (local.get $source)
+      (i32.const 0)
+      (cont.new $c (ref.func $forty-two))
+      (i32.const 1))
+    (array.copy $array $array
+      (local.get $destination)
+      (i32.const 0)
+      (local.get $source)
+      (i32.const 0)
+      (i32.const 1))
+    (call $gc)
+    (resume $c
+      (ref.as_non_null
+        (array.get $array (local.get $destination) (i32.const 0)))))
+
+  (func (export "null-defaults") (result i32)
+    (local $holder (ref $holder))
+    (local $array (ref $array))
+    (local.set $holder (struct.new_default $holder))
+    (local.set $array (array.new_default $array (i32.const 1)))
+    (i32.add
+      (ref.is_null (struct.get $holder 0 (local.get $holder)))
+      (ref.is_null
+        (array.get $array (local.get $array) (i32.const 0)))))
+
+  ;; Loading an alias from a GC object must reproduce the interned revision
+  ;; witness. Consuming one alias therefore invalidates all other loads of the
+  ;; same field.
+  (func (export "consume-struct-field-twice")
+    (local $holder (ref $holder))
+    (local.set $holder
+      (struct.new $holder
+        (cont.new $c (ref.func $forty-two))))
+    (drop
+      (resume $c
+        (ref.as_non_null
+          (struct.get $holder 0 (local.get $holder)))))
+    (drop
+      (resume $c
+        (ref.as_non_null
+          (struct.get $holder 0 (local.get $holder))))))
+)
+
+(assert_return (invoke "struct-initialize") (i32.const 42))
+(assert_return (invoke "struct-update") (i32.const 42))
+(assert_return (invoke "array-initialize") (i32.const 42))
+(assert_return (invoke "array-update") (i32.const 42))
+(assert_return (invoke "array-fill-and-copy") (i32.const 42))
+(assert_return (invoke "null-defaults") (i32.const 2))
+(assert_trap
+  (invoke "consume-struct-field-twice")
+  "continuation already consumed")
