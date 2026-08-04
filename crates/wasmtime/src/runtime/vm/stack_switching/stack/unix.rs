@@ -67,7 +67,7 @@ use std::ops::Range;
 use std::ptr;
 
 use crate::prelude::*;
-use crate::runtime::vm::stack_switching::VMHostArray;
+use crate::runtime::vm::stack_switching::{VMHostArray, VMPayloads};
 use crate::runtime::vm::{VMContext, VMFuncRef, ValRaw};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -228,14 +228,13 @@ impl VMContinuationStack {
     ///  ---------------|-------------------------------------------------------
     ///       -0x28 - s | func_ref
     ///       -0x30 - s | caller_vmctx
-    ///       -0x38 - s | args (of type *mut ArrayRef<ValRaw>)
+    ///       -0x38 - s | args (of type *mut VMHostArray<u128>)
     ///       -0x40 - s | return_value_count
     pub fn initialize<const GC_REFS: bool>(
         &self,
         func_ref: *const VMFuncRef,
         caller_vmctx: *mut VMContext,
-        args: *mut VMHostArray<ValRaw>,
-        #[cfg(feature = "gc")] args_gc_ref_data: &mut *mut u8,
+        args: *mut VMPayloads,
         parameter_count: u32,
         return_value_count: u32,
     ) -> Result<()> {
@@ -247,7 +246,8 @@ impl VMContinuationStack {
                 target.write(value)
             };
 
-            let args_ref = &mut *args;
+            let payloads = &mut *args;
+            let args_ref = &mut payloads.buffer;
             let args_capacity = std::cmp::max(parameter_count, return_value_count);
             // The args object must currently be empty.
             debug_assert_eq!(args_ref.capacity, 0);
@@ -314,7 +314,7 @@ impl VMContinuationStack {
                 tos.sub(0x20 + args_data_size)
             };
             args_ref.capacity = args_capacity;
-            args_ref.data = args_data_ptr.cast::<ValRaw>();
+            args_ref.data = args_data_ptr.cast::<u128>();
             #[cfg(feature = "gc")]
             if GC_REFS {
                 let data = if args_capacity == 0 {
@@ -325,7 +325,7 @@ impl VMContinuationStack {
                 if args_capacity > 0 {
                     data.write_bytes(0, usize::try_from(args_capacity)?);
                 }
-                *args_gc_ref_data = data;
+                payloads.gc_ref_data = data;
             }
 
             let to_store = [
@@ -337,7 +337,10 @@ impl VMContinuationStack {
                 // Data after the args buffer:
                 (0x28 + dynamic_data_size, func_ref.addr()),
                 (0x30 + dynamic_data_size, caller_vmctx.addr()),
-                (0x38 + dynamic_data_size, args.addr()),
+                (
+                    0x38 + dynamic_data_size,
+                    (args_ref as *mut VMHostArray<u128>).addr(),
+                ),
                 (
                     0x40 + dynamic_data_size,
                     usize::try_from(return_value_count)?,
@@ -372,7 +375,7 @@ impl Drop for VMContinuationStack {
 unsafe extern "C" fn fiber_start(
     func_ref: *mut VMFuncRef,
     caller_vmctx: *mut VMContext,
-    args: *mut VMHostArray<ValRaw>,
+    args: *mut VMHostArray<u128>,
     return_value_count: u32,
 ) -> bool {
     unsafe {
@@ -382,8 +385,11 @@ unsafe extern "C" fn fiber_start(
         let params_and_returns: NonNull<[ValRaw]> = if args.capacity == 0 {
             NonNull::from(&[])
         } else {
-            std::slice::from_raw_parts_mut(args.data, usize::try_from(args.capacity).unwrap())
-                .into()
+            std::slice::from_raw_parts_mut(
+                args.data.cast::<ValRaw>(),
+                usize::try_from(args.capacity).unwrap(),
+            )
+            .into()
         };
 
         // NOTE(frank-emrich) The usage of the `caller_vmctx` is probably not

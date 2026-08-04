@@ -4,8 +4,8 @@
 use crate::Result;
 use core::ops::Range;
 
-use crate::runtime::vm::stack_switching::VMHostArray;
-use crate::runtime::vm::{VMContext, VMFuncRef, ValRaw};
+use crate::runtime::vm::stack_switching::VMPayloads;
+use crate::runtime::vm::{VMContext, VMFuncRef};
 
 cfg_select! {
     all(feature = "stack-switching", unix, target_arch = "x86_64") => {
@@ -95,9 +95,9 @@ impl VMContinuationStack {
     /// Initializes this stack, such that it will execute the function denoted
     /// by `func_ref`. `parameter_count` and `return_value_count` must be the
     /// corresponding number of parameters and return values of `func_ref`.
-    /// `args` must point to the `args` field of the `VMContRef` owning this pointer.
-    /// When `GC_REFS` is true, `args_gc_ref_data` receives the corresponding
-    /// root-marker buffer.
+    /// `args` must point to the `args` field of the `VMContRef` owning this
+    /// stack. When `GC_REFS` is true, its `gc_ref_data` field receives the
+    /// corresponding root-marker buffer.
     ///
     /// It will be updated by this function to correctly describe
     /// the buffer used by this function for its arguments and return values.
@@ -105,8 +105,7 @@ impl VMContinuationStack {
         &self,
         func_ref: *const VMFuncRef,
         caller_vmctx: *mut VMContext,
-        args: *mut VMHostArray<ValRaw>,
-        #[cfg(feature = "gc")] args_gc_ref_data: &mut *mut u8,
+        args: *mut VMPayloads,
         parameter_count: u32,
         return_value_count: u32,
     ) -> Result<()> {
@@ -114,8 +113,6 @@ impl VMContinuationStack {
             func_ref,
             caller_vmctx,
             args,
-            #[cfg(feature = "gc")]
-            args_gc_ref_data,
             parameter_count,
             return_value_count,
         )

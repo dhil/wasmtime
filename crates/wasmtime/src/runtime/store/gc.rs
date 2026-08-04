@@ -797,11 +797,9 @@ impl StoreOpaque {
     fn trace_wasm_continuation_roots(&mut self, gc_roots_list: &mut GcRootsList) {
         use crate::vm::{VMPayloads, VMStackState};
 
-        unsafe fn trace_payload_roots(
-            gc_roots_list: &mut GcRootsList,
-            payloads: &VMPayloads,
-            gc_ref_data: *mut u8,
-        ) {
+        unsafe fn trace_payload_roots(gc_roots_list: &mut GcRootsList, payloads: &VMPayloads) {
+            let gc_ref_data = payloads.gc_ref_data;
+            let payloads = &payloads.buffer;
             assert!(payloads.length <= payloads.capacity);
             if gc_ref_data.is_null() {
                 return;
@@ -826,11 +824,7 @@ impl StoreOpaque {
             match state {
                 VMStackState::Suspended => {
                     unsafe {
-                        trace_payload_roots(
-                            gc_roots_list,
-                            &continuation.values,
-                            continuation.values_gc_ref_data,
-                        );
+                        trace_payload_roots(gc_roots_list, &continuation.values);
                     }
                     Backtrace::trace_suspended_continuation(self, continuation.deref(), |frame| {
                         Self::trace_wasm_stack_frame(self.modules(), gc_roots_list, frame);
@@ -846,11 +840,7 @@ impl StoreOpaque {
                     // further along in the chain, nothing required at this point.
                 }
                 VMStackState::Fresh => unsafe {
-                    trace_payload_roots(
-                        gc_roots_list,
-                        &continuation.args,
-                        continuation.args_gc_ref_data,
-                    );
+                    trace_payload_roots(gc_roots_list, &continuation.args);
                 },
                 VMStackState::Returned | VMStackState::Trapped => {
                     // Terminal continuations have no live GC values.

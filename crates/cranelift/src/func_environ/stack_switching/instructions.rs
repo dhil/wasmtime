@@ -72,7 +72,17 @@ pub(crate) mod stack_switching_helpers {
         phantom: PhantomData<T>,
     }
 
-    pub type VMPayloads = VMHostArrayRef<u128>;
+    /// Compile-time reference to a runtime `VMPayloads` descriptor.
+    ///
+    /// This wrapper keeps the payload buffer and its GC-reference markers
+    /// paired. Its core invariant is that `gc_ref_data`, when non-null, points
+    /// to one marker byte for every slot in `buffer`; callers must update a
+    /// slot's value and marker together.
+    #[derive(Copy, Clone)]
+    pub struct VMPayloads {
+        address: ir::Value,
+        buffer: VMHostArrayRef<u128>,
+    }
 
     // Actually a vector of *mut VMTagDefinition
     pub type VMHandlerList = VMHostArrayRef<*mut u8>;
@@ -108,20 +118,7 @@ pub(crate) mod stack_switching_helpers {
         ) -> VMPayloads {
             let offset: i64 = env.offsets.ptr.vmcontref_args().into();
             let address = builder.ins().iadd_imm_s(self.address, offset);
-            VMPayloads::new(address)
-        }
-
-        pub fn args_gc_ref_data<'a>(
-            &self,
-            env: &mut crate::func_environ::FuncEnvironment<'a>,
-            builder: &mut FunctionBuilder,
-        ) -> ir::Value {
-            let offset: i32 = env.offsets.ptr.vmcontref_args_gc_ref_data().into();
-            let region = env.alias_regions.vmcontref_region(builder.func);
-            let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
-            builder
-                .ins()
-                .load(env.pointer_type(), flags, self.address, offset)
+            VMPayloads::new(env, address)
         }
 
         pub fn values<'a>(
@@ -131,32 +128,7 @@ pub(crate) mod stack_switching_helpers {
         ) -> VMPayloads {
             let offset: i64 = env.offsets.ptr.vmcontref_values().into();
             let address = builder.ins().iadd_imm_s(self.address, offset);
-            VMPayloads::new(address)
-        }
-
-        pub fn values_gc_ref_data<'a>(
-            &self,
-            env: &mut crate::func_environ::FuncEnvironment<'a>,
-            builder: &mut FunctionBuilder,
-        ) -> ir::Value {
-            let offset: i32 = env.offsets.ptr.vmcontref_values_gc_ref_data().into();
-            let region = env.alias_regions.vmcontref_region(builder.func);
-            let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
-            builder
-                .ins()
-                .load(env.pointer_type(), flags, self.address, offset)
-        }
-
-        pub fn set_values_gc_ref_data<'a>(
-            &self,
-            env: &mut crate::func_environ::FuncEnvironment<'a>,
-            builder: &mut FunctionBuilder,
-            data: ir::Value,
-        ) {
-            let offset: i32 = env.offsets.ptr.vmcontref_values_gc_ref_data().into();
-            let region = env.alias_regions.vmcontref_region(builder.func);
-            let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
-            builder.ins().store(flags, data, self.address, offset);
+            VMPayloads::new(env, address)
         }
 
         pub fn common_stack_information<'a>(
@@ -272,6 +244,49 @@ pub(crate) mod stack_switching_helpers {
             let offset: i64 = env.offsets.ptr.vmcontref_stack().into();
             let fiber_stack_top_of_stack_ptr = builder.ins().iadd_imm_s(self.address, offset);
             VMContinuationStack::new(fiber_stack_top_of_stack_ptr)
+        }
+    }
+
+    impl VMPayloads {
+        pub fn new(env: &mut crate::func_environ::FuncEnvironment<'_>, address: ir::Value) -> Self {
+            debug_assert_eq!(env.offsets.ptr.vmpayloads_buffer(), 0);
+            Self {
+                address,
+                buffer: VMHostArrayRef::new(address),
+            }
+        }
+
+        pub fn get_gc_ref_data(
+            &self,
+            env: &mut crate::func_environ::FuncEnvironment<'_>,
+            builder: &mut FunctionBuilder,
+        ) -> ir::Value {
+            let offset: i32 = env.offsets.ptr.vmpayloads_gc_ref_data().into();
+            let region = env.alias_regions.vmcontref_region(builder.func);
+            let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
+            builder
+                .ins()
+                .load(env.pointer_type(), flags, self.address, offset)
+        }
+
+        pub fn set_gc_ref_data(
+            &self,
+            env: &mut crate::func_environ::FuncEnvironment<'_>,
+            builder: &mut FunctionBuilder,
+            data: ir::Value,
+        ) {
+            let offset: i32 = env.offsets.ptr.vmpayloads_gc_ref_data().into();
+            let region = env.alias_regions.vmcontref_region(builder.func);
+            let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
+            builder.ins().store(flags, data, self.address, offset);
+        }
+    }
+
+    impl core::ops::Deref for VMPayloads {
+        type Target = VMHostArrayRef<u128>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.buffer
         }
     }
 
@@ -986,7 +1001,7 @@ fn types_need_gc_ref_markers(types: &[WasmValType]) -> bool {
 fn prepare_values_gc_ref_markers(
     env: &mut crate::func_environ::FuncEnvironment<'_>,
     builder: &mut FunctionBuilder,
-    contref: helpers::VMContRef,
+    payloads: helpers::VMPayloads,
     capacity: u32,
     initial_types: &[WasmValType],
 ) -> ir::Value {
@@ -1002,7 +1017,7 @@ fn prepare_values_gc_ref_markers(
     env.stack_switching_values_gc_refs_buffer = Some(slot);
 
     let data = builder.ins().stack_addr(env.pointer_type(), slot, 0);
-    contref.set_values_gc_ref_data(env, builder, data);
+    payloads.set_gc_ref_data(env, builder, data);
 
     let region = env.alias_regions.stack_slot_region(builder.func, slot);
     let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
@@ -1063,7 +1078,7 @@ pub(crate) fn vmcontref_store_payloads<'a>(
             let (ptr, original_length) = args.occupy_next_slots(env, builder, count);
             let mut block_args = vec![BlockArg::Value(ptr)];
             if needs_gc_ref_markers {
-                let gc_refs_ptr = co.args_gc_ref_data(env, builder);
+                let gc_refs_ptr = args.get_gc_ref_data(env, builder);
                 let gc_refs_ptr = builder.ins().iadd(gc_refs_ptr, original_length);
                 block_args.push(BlockArg::Value(gc_refs_ptr));
             }
@@ -1082,7 +1097,7 @@ pub(crate) fn vmcontref_store_payloads<'a>(
             let (ptr, original_length) = payloads.occupy_next_slots(env, builder, count);
             let mut block_args = vec![BlockArg::Value(ptr)];
             if needs_gc_ref_markers {
-                let gc_refs_ptr = co.values_gc_ref_data(env, builder);
+                let gc_refs_ptr = payloads.get_gc_ref_data(env, builder);
                 let gc_refs_ptr = builder.ins().iadd(gc_refs_ptr, original_length);
                 block_args.push(BlockArg::Value(gc_refs_ptr));
             }
@@ -2056,13 +2071,7 @@ pub(crate) fn translate_suspend<'a>(
         types_need_gc_ref_markers(suspend_arg_types) || types_need_gc_ref_markers(tag_return_types);
 
     if needs_gc_ref_markers {
-        prepare_values_gc_ref_markers(
-            env,
-            builder,
-            active_contref,
-            required_capacity,
-            suspend_arg_types,
-        );
+        prepare_values_gc_ref_markers(env, builder, values, required_capacity, suspend_arg_types);
     }
 
     if suspend_args.len() > 0 {
@@ -2102,7 +2111,7 @@ pub(crate) fn translate_suspend<'a>(
 
     if needs_gc_ref_markers {
         let zero = builder.ins().iconst(env.pointer_type(), 0);
-        active_contref.set_values_gc_ref_data(env, builder, zero);
+        values.set_gc_ref_data(env, builder, zero);
     }
 
     return_values
@@ -2180,7 +2189,7 @@ pub(crate) fn translate_switch<'a>(
         ));
 
         if return_values_need_gc_ref_markers {
-            prepare_values_gc_ref_markers(env, builder, switcher_contref, required_capacity, &[]);
+            prepare_values_gc_ref_markers(env, builder, values, required_capacity, &[]);
         }
 
         let switcher_contref_csi = switcher_contref.common_stack_information(env, builder);
@@ -2369,7 +2378,9 @@ pub(crate) fn translate_switch<'a>(
 
     if return_values_need_gc_ref_markers {
         let zero = builder.ins().iconst(env.pointer_type(), 0);
-        switcher_contref.set_values_gc_ref_data(env, builder, zero);
+        switcher_contref
+            .values(env, builder)
+            .set_gc_ref_data(env, builder, zero);
     }
 
     return_values
