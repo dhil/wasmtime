@@ -451,8 +451,9 @@ fn read_cont_ref_at_addr(
 ) -> WasmResult<ir::Value> {
     let id = builder.ins().load(ir::types::I32, flags, addr, 0);
 
-    // The getter writes the two-word continuation value into an explicit stack
-    // slot because builtins currently return at most one value.
+    // We create a stack slot to hold the continuation values (16
+    // bytes), and pass the address of this slot as the out parameter
+    // to the builtin.
     let pointer_type = func_env.pointer_type();
     let pointer_bytes = pointer_type.bytes();
     let slot = builder.create_sized_stack_slot(ir::StackSlotData::new(
@@ -460,21 +461,21 @@ fn read_cont_ref_at_addr(
         u32::from(2 * pointer_bytes),
         u8::try_from(pointer_bytes.trailing_zeros()).unwrap(),
     ));
-    let result = builder.ins().stack_addr(pointer_type, slot, 0);
+    let out_result = builder.ins().stack_addr(pointer_type, slot, 0);
 
     let vmctx = func_env.vmctx_val(&mut builder.cursor());
     let get = func_env
         .builtin_functions
         .get_interned_contref(builder.func);
-    builder.ins().call(get, &[vmctx, id, result]);
+    builder.ins().call(get, &[vmctx, id, out_result]);
 
     let region = func_env.alias_regions.stack_slot_region(builder.func, slot);
     let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
-    let contref = builder.ins().load(pointer_type, flags, result, 0);
+    let contref = builder.ins().load(pointer_type, flags, out_result, 0);
     let revision = builder.ins().load(
         pointer_type,
         flags,
-        result,
+        out_result,
         i32::try_from(pointer_bytes).unwrap(),
     );
     Ok(fatpointer::construct(

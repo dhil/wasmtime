@@ -565,8 +565,8 @@ unsafe fn intern_func_ref_for_gc_heap(
     Ok(func_ref_id.into_raw())
 }
 
-// Intern a continuation reference into the GC heap's side table, returning
-// the four-byte ID stored in GC aggregate fields.
+// Intern a continuation reference into the GC heap's side table,
+// returning the four-byte ID stored in GC aggregate fields.
 //
 // This libcall may not GC.
 #[cfg(all(feature = "gc", feature = "stack-switching"))]
@@ -584,8 +584,8 @@ unsafe fn intern_contref_for_gc_heap(
     Ok(id)
 }
 
-// Resolve a continuation-reference ID loaded from the GC heap and write the
-// complete fat value into caller-provided stack storage.
+// Resolve a continuation reference ID loaded from the GC heap and
+// write the complete value into caller provided stack storage.
 //
 // This libcall may not GC.
 #[cfg(all(feature = "gc", feature = "stack-switching"))]
@@ -593,7 +593,7 @@ unsafe fn get_interned_contref(
     store: &mut dyn VMStore,
     _instance: InstanceId,
     contref_id: u32,
-    result: *mut u8,
+    out_result: *mut u8,
 ) -> Result<()> {
     use crate::store::AutoAssertNoGc;
 
@@ -615,7 +615,7 @@ unsafe fn get_interned_contref(
             revision: 0,
         },
     };
-    unsafe { result.cast::<RawContObj>().write(raw) };
+    unsafe { out_result.cast::<RawContObj>().write(raw) };
     Ok(())
 }
 
