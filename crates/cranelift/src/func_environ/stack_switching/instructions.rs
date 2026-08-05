@@ -280,6 +280,93 @@ pub(crate) mod stack_switching_helpers {
             let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
             builder.ins().store(flags, data, self.address, offset);
         }
+
+        /// Prepares stack storage for this payload buffer.
+        ///
+        /// The payload values occupy the first `capacity * 16` bytes. When GC
+        /// markers are needed, one marker byte per payload follows immediately
+        /// after the values. The descriptor's capacity and pointers always
+        /// describe the layout selected at this particular instruction site;
+        /// other sites may use a different split within the same stack slot.
+        pub fn prepare_stack_storage(
+            &self,
+            env: &mut crate::func_environ::FuncEnvironment<'_>,
+            builder: &mut FunctionBuilder,
+            capacity: u32,
+            initial_types: &[WasmValType],
+            needs_gc_ref_markers: bool,
+            existing_slot: Option<StackSlot>,
+        ) -> StackSlot {
+            debug_assert!(capacity > 0);
+            debug_assert!(initial_types.len() <= usize::try_from(capacity).unwrap());
+
+            let (align, entry_size) =
+                <u128 as VMHostArrayEntry>::vmhostarray_entry_layout(&env.offsets.ptr);
+            let values_size = capacity
+                .checked_mul(entry_size)
+                .expect("stack switching values buffer size should fit in u32");
+            let required_size = if needs_gc_ref_markers {
+                values_size
+                    .checked_add(capacity)
+                    .expect("stack switching values storage size should fit in u32")
+            } else {
+                values_size
+            };
+
+            let slot = match existing_slot {
+                Some(slot) => {
+                    // Keep the slot identity stable: `stack_addr` instructions
+                    // emitted at earlier sites continue to refer to this slot
+                    // when a later site requires more storage.
+                    let slot_data = &mut builder.func.sized_stack_slots[slot];
+                    debug_assert!(align <= slot_data.align_shift);
+                    debug_assert_eq!(slot_data.kind, ExplicitSlot);
+                    slot_data.size = slot_data.size.max(required_size);
+                    slot
+                }
+                None => builder.create_sized_stack_slot(ir::StackSlotData::new(
+                    ir::StackSlotKind::ExplicitSlot,
+                    required_size,
+                    align,
+                )),
+            };
+
+            let capacity_value = builder.ins().iconst(I32, i64::from(capacity));
+            let values_data = builder.ins().stack_addr(env.pointer_type(), slot, 0);
+            self.set_capacity(env, builder, capacity_value);
+            self.set_data(env, builder, values_data);
+
+            if needs_gc_ref_markers {
+                let marker_data = builder
+                    .ins()
+                    .iadd_imm_s(values_data, i64::from(values_size));
+                self.set_gc_ref_data(env, builder, marker_data);
+
+                let region = env.alias_regions.stack_slot_region(builder.func, slot);
+                let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
+                let zero = builder.ins().iconst(I8, 0);
+                for offset in 0..capacity {
+                    builder
+                        .ins()
+                        .store(flags, zero, marker_data, i32::try_from(offset).unwrap());
+                }
+                for (offset, ty) in initial_types.iter().enumerate() {
+                    if ty.is_vmgcref_type_and_not_i31() {
+                        let marker = builder
+                            .ins()
+                            .iconst(I8, i64::from(wasmtime_environ::CONTINUATION_PAYLOAD_GC_REF));
+                        builder.ins().store(
+                            flags,
+                            marker,
+                            marker_data,
+                            i32::try_from(offset).unwrap(),
+                        );
+                    }
+                }
+            }
+
+            slot
+        }
     }
 
     impl core::ops::Deref for VMPayloads {
@@ -996,48 +1083,6 @@ use stack_switching_helpers as helpers;
 
 fn types_need_gc_ref_markers(types: &[WasmValType]) -> bool {
     types.iter().any(|ty| ty.is_vmgcref_type_and_not_i31())
-}
-
-fn prepare_values_gc_ref_markers(
-    env: &mut crate::func_environ::FuncEnvironment<'_>,
-    builder: &mut FunctionBuilder,
-    payloads: helpers::VMPayloads,
-    capacity: u32,
-    initial_types: &[WasmValType],
-) -> ir::Value {
-    debug_assert!(capacity > 0);
-    let slot = match env.stack_switching_values_gc_refs_buffer {
-        Some(slot) if builder.func.sized_stack_slots[slot].size >= capacity => slot,
-        _ => builder.create_sized_stack_slot(ir::StackSlotData::new(
-            ir::StackSlotKind::ExplicitSlot,
-            capacity,
-            0,
-        )),
-    };
-    env.stack_switching_values_gc_refs_buffer = Some(slot);
-
-    let data = builder.ins().stack_addr(env.pointer_type(), slot, 0);
-    payloads.set_gc_ref_data(env, builder, data);
-
-    let region = env.alias_regions.stack_slot_region(builder.func, slot);
-    let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
-    let zero = builder.ins().iconst(I8, 0);
-    for offset in 0..capacity {
-        builder
-            .ins()
-            .store(flags, zero, data, i32::try_from(offset).unwrap());
-    }
-    for (offset, ty) in initial_types.iter().enumerate() {
-        if ty.is_vmgcref_type_and_not_i31() {
-            let marker = builder
-                .ins()
-                .iconst(I8, i64::from(wasmtime_environ::CONTINUATION_PAYLOAD_GC_REF));
-            builder
-                .ins()
-                .store(flags, marker, data, i32::try_from(offset).unwrap());
-        }
-    }
-    data
 }
 
 /// Stores the given arguments in the appropriate `VMPayloads` object in the
@@ -2060,19 +2105,17 @@ pub(crate) fn translate_suspend<'a>(
     ))
     .expect("Number of stack switching payloads should fit in u32");
 
-    env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
+    let needs_gc_ref_markers =
+        types_need_gc_ref_markers(suspend_arg_types) || types_need_gc_ref_markers(tag_return_types);
+    let existing_storage = env.stack_switching_values_storage;
+    env.stack_switching_values_storage = Some(values.prepare_stack_storage(
         env,
         builder,
         required_capacity,
-        env.stack_switching_values_buffer,
+        suspend_arg_types,
+        needs_gc_ref_markers,
+        existing_storage,
     ));
-
-    let needs_gc_ref_markers =
-        types_need_gc_ref_markers(suspend_arg_types) || types_need_gc_ref_markers(tag_return_types);
-
-    if needs_gc_ref_markers {
-        prepare_values_gc_ref_markers(env, builder, values, required_capacity, suspend_arg_types);
-    }
 
     if suspend_args.len() > 0 {
         values.store_data_entries(env, builder, suspend_args);
@@ -2181,16 +2224,15 @@ pub(crate) fn translate_switch<'a>(
         // reference.
         let values = switcher_contref.values(env, builder);
         let required_capacity = u32::try_from(std::cmp::max(1, return_types.len())).unwrap();
-        env.stack_switching_values_buffer = Some(values.allocate_or_reuse_stack_slot(
+        let existing_storage = env.stack_switching_values_storage;
+        env.stack_switching_values_storage = Some(values.prepare_stack_storage(
             env,
             builder,
             required_capacity,
-            env.stack_switching_values_buffer,
+            &[],
+            return_values_need_gc_ref_markers,
+            existing_storage,
         ));
-
-        if return_values_need_gc_ref_markers {
-            prepare_values_gc_ref_markers(env, builder, values, required_capacity, &[]);
-        }
 
         let switcher_contref_csi = switcher_contref.common_stack_information(env, builder);
         switcher_contref_csi.set_state_suspended(env, builder);

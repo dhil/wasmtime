@@ -216,14 +216,10 @@ pub struct FuncEnvironment<'module_environment> {
     /// current stack's `handler_list` field.
     stack_switching_handler_list_buffer: Option<ir::StackSlot>,
 
-    /// Used by the stack switching feature. If set, we have a allocated a
-    /// slot on this function's stack to be used for the
-    /// current continuation's `values` field.
-    stack_switching_values_buffer: Option<ir::StackSlot>,
-
-    /// The stack slot containing the GC-reference markers corresponding to
-    /// `stack_switching_values_buffer`.
-    stack_switching_values_gc_refs_buffer: Option<ir::StackSlot>,
+    /// Used by the stack switching feature. If set, this is the stack storage
+    /// backing the current continuation's `values` field, including its
+    /// optional GC-reference markers.
+    stack_switching_values_storage: Option<ir::StackSlot>,
 
     /// The stack-slot used for exposing Wasm state via debug
     /// instrumentation, if any, and the builder containing its metadata.
@@ -304,8 +300,7 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
             stack_limit_at_function_entry: None,
 
             stack_switching_handler_list_buffer: None,
-            stack_switching_values_buffer: None,
-            stack_switching_values_gc_refs_buffer: None,
+            stack_switching_values_storage: None,
 
             state_slot: None,
             next_srcloc: ir::SourceLoc::default(),
