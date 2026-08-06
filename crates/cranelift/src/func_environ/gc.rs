@@ -431,6 +431,7 @@ pub fn intern_func_ref(
 fn intern_cont_ref(
     func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder<'_>,
+    ref_type: WasmRefType,
     contobj: ir::Value,
 ) -> ir::Value {
     assert_eq!(ref_type.heap_type.top(), WasmHeapTopType::Cont);
@@ -501,11 +502,12 @@ fn read_cont_ref_at_addr(
 fn write_cont_ref_at_addr(
     func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder<'_>,
+    ref_type: WasmRefType,
     flags: ir::MemFlagsData,
     field_addr: ir::Value,
     contobj: ir::Value,
 ) {
-    let id = intern_cont_ref(func_env, builder, contobj);
+    let id = intern_cont_ref(func_env, builder, ref_type, contobj);
     builder.ins().store(flags, id, field_addr, 0);
 }
 
@@ -566,7 +568,7 @@ pub fn write_field_at_addr(
                 )?;
             }
             WasmHeapTopType::Cont => {
-                write_cont_ref_at_addr(func_env, builder, flags, field_addr, new_val)
+                write_cont_ref_at_addr(func_env, builder, r, flags, field_addr, new_val)
             }
         },
         WasmStorageType::Val(_) => {

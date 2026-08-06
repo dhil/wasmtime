@@ -29,7 +29,7 @@
           (cont.new $c (ref.func $child)))
         (unreachable)))
 
-    (struct.get $box 0 (ref.as_non_null (local.get $box))))
+    (struct.get $box 0 (local.get $box)))
 )
 
 (assert_return (invoke "parent-frame") (i32.const 42))
@@ -55,7 +55,7 @@
     (local.set $box (struct.new $box (i32.const 20)))
     (i32.add
       (resume $c (cont.new $c (ref.func $child)))
-      (struct.get $box 0 (ref.as_non_null (local.get $box)))))
+      (struct.get $box 0 (local.get $box))))
   (elem declare func $middle)
 
   (func (export "parent-chain") (result i32)
@@ -71,8 +71,8 @@
         (unreachable)))
 
     (i32.add
-      (resume $c (ref.as_non_null (local.get $suspended)))
-      (struct.get $box 0 (ref.as_non_null (local.get $box)))))
+      (resume $c (local.get $suspended))
+      (struct.get $box 0 (local.get $box))))
 )
 
 (assert_return (invoke "parent-chain") (i32.const 121))
@@ -102,7 +102,7 @@
 
     (call $gc)
     (resume $without-arg-c
-      (ref.as_non_null (local.get $continuation))))
+      (local.get $continuation)))
 )
 
 (assert_return (invoke "bound-argument") (i32.const 73))
@@ -137,7 +137,7 @@
     (local.set $ready
       (cont.bind $suspended-c $initial-c
         (struct.new $box (i32.const 91))
-        (ref.as_non_null (local.get $suspended))))
+        (local.get $suspended)))
 
     (call $gc)
     (resume $initial-c (ref.as_non_null (local.get $ready))))
@@ -167,8 +167,7 @@
         (cont.new $c (ref.func $forty-two))))
     (call $gc)
     (resume $c
-      (ref.as_non_null
-        (struct.get $holder 0 (local.get $holder)))))
+      (struct.get $holder 0 (local.get $holder))))
 
   (func (export "struct-update") (result i32)
     (local $holder (ref $holder))
@@ -178,8 +177,7 @@
       (cont.new $c (ref.func $forty-two)))
     (call $gc)
     (resume $c
-      (ref.as_non_null
-        (struct.get $holder 0 (local.get $holder)))))
+      (struct.get $holder 0 (local.get $holder))))
 
   (func (export "array-initialize") (result i32)
     (local $array (ref $array))
@@ -188,8 +186,7 @@
         (cont.new $c (ref.func $forty-two))))
     (call $gc)
     (resume $c
-      (ref.as_non_null
-        (array.get $array (local.get $array) (i32.const 0)))))
+      (array.get $array (local.get $array) (i32.const 0))))
 
   (func (export "array-update") (result i32)
     (local $array (ref $array))
@@ -200,8 +197,7 @@
       (cont.new $c (ref.func $forty-two)))
     (call $gc)
     (resume $c
-      (ref.as_non_null
-        (array.get $array (local.get $array) (i32.const 0)))))
+      (array.get $array (local.get $array) (i32.const 0))))
 
   (func (export "array-fill-and-copy") (result i32)
     (local $source (ref $array))
@@ -221,8 +217,7 @@
       (i32.const 1))
     (call $gc)
     (resume $c
-      (ref.as_non_null
-        (array.get $array (local.get $destination) (i32.const 0)))))
+      (array.get $array (local.get $destination) (i32.const 0))))
 
   (func (export "null-defaults") (result i32)
     (local $holder (ref $holder))
@@ -244,12 +239,10 @@
         (cont.new $c (ref.func $forty-two))))
     (drop
       (resume $c
-        (ref.as_non_null
-          (struct.get $holder 0 (local.get $holder)))))
+        (struct.get $holder 0 (local.get $holder))))
     (drop
       (resume $c
-        (ref.as_non_null
-          (struct.get $holder 0 (local.get $holder))))))
+        (struct.get $holder 0 (local.get $holder)))))
 )
 
 (assert_return (invoke "struct-initialize") (i32.const 42))

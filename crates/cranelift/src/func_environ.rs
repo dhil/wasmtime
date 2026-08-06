@@ -46,6 +46,19 @@ use wasmtime_environ::{
 };
 use wasmtime_environ::{FUNCREF_INIT_BIT, FUNCREF_MASK};
 
+/// Function-local stack slots backing a continuation's `VMPayloads::values`.
+///
+/// The values and their GC-reference markers are logically one payload
+/// descriptor but use distinct stack slots so that Cranelift can assign them
+/// distinct alias regions. The marker slot is only allocated when this
+/// function contains a stack-switching site whose payloads may contain GC
+/// references.
+#[derive(Clone, Copy)]
+pub(crate) struct VMPayloadStackSlots {
+    pub(crate) values: ir::StackSlot,
+    pub(crate) gc_ref_markers: Option<ir::StackSlot>,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Extension {
     Sign,
@@ -216,10 +229,9 @@ pub struct FuncEnvironment<'module_environment> {
     /// current stack's `handler_list` field.
     stack_switching_handler_list_buffer: Option<ir::StackSlot>,
 
-    /// Used by the stack switching feature. If set, this is the stack storage
-    /// backing the current continuation's `values` field, including its
-    /// optional GC-reference markers.
-    stack_switching_values_storage: Option<ir::StackSlot>,
+    /// Used by the stack switching feature. If set, these are the stack slots
+    /// backing the current continuation's `values` field.
+    stack_switching_values_storage: Option<VMPayloadStackSlots>,
 
     /// The stack-slot used for exposing Wasm state via debug
     /// instrumentation, if any, and the builder containing its metadata.

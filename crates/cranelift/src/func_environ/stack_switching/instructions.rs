@@ -283,11 +283,11 @@ pub(crate) mod stack_switching_helpers {
 
         /// Prepares stack storage for this payload buffer.
         ///
-        /// The payload values occupy the first `capacity * 16` bytes. When GC
-        /// markers are needed, one marker byte per payload follows immediately
-        /// after the values. The descriptor's capacity and pointers always
-        /// describe the layout selected at this particular instruction site;
-        /// other sites may use a different split within the same stack slot.
+        /// Payload values and their GC-reference markers use distinct stack
+        /// slots so that they have distinct alias regions. The descriptor's
+        /// capacity and pointers always describe the storage selected at this
+        /// particular instruction site. Both slots retain their identities and
+        /// grow in place as later sites require more capacity.
         pub fn prepare_stack_storage(
             &self,
             env: &mut crate::func_environ::FuncEnvironment<'_>,
@@ -295,8 +295,8 @@ pub(crate) mod stack_switching_helpers {
             capacity: u32,
             initial_types: &[WasmValType],
             needs_gc_ref_markers: bool,
-            existing_slot: Option<StackSlot>,
-        ) -> StackSlot {
+            existing_slots: Option<crate::func_environ::VMPayloadStackSlots>,
+        ) -> crate::func_environ::VMPayloadStackSlots {
             debug_assert!(capacity > 0);
             debug_assert!(initial_types.len() <= usize::try_from(capacity).unwrap());
 
@@ -305,15 +305,8 @@ pub(crate) mod stack_switching_helpers {
             let values_size = capacity
                 .checked_mul(entry_size)
                 .expect("stack switching values buffer size should fit in u32");
-            let required_size = if needs_gc_ref_markers {
-                values_size
-                    .checked_add(capacity)
-                    .expect("stack switching values storage size should fit in u32")
-            } else {
-                values_size
-            };
 
-            let slot = match existing_slot {
+            let values_slot = match existing_slots.map(|slots| slots.values) {
                 Some(slot) => {
                     // Keep the slot identity stable: `stack_addr` instructions
                     // emitted at earlier sites continue to refer to this slot
@@ -321,28 +314,44 @@ pub(crate) mod stack_switching_helpers {
                     let slot_data = &mut builder.func.sized_stack_slots[slot];
                     debug_assert!(align <= slot_data.align_shift);
                     debug_assert_eq!(slot_data.kind, ExplicitSlot);
-                    slot_data.size = slot_data.size.max(required_size);
+                    slot_data.size = slot_data.size.max(values_size);
                     slot
                 }
                 None => builder.create_sized_stack_slot(ir::StackSlotData::new(
                     ir::StackSlotKind::ExplicitSlot,
-                    required_size,
+                    values_size,
                     align,
                 )),
             };
 
             let capacity_value = builder.ins().iconst(I32, i64::from(capacity));
-            let values_data = builder.ins().stack_addr(env.pointer_type(), slot, 0);
+            let values_data = builder.ins().stack_addr(env.pointer_type(), values_slot, 0);
             self.set_capacity(env, builder, capacity_value);
             self.set_data(env, builder, values_data);
 
+            let mut gc_ref_markers = existing_slots.and_then(|slots| slots.gc_ref_markers);
             if needs_gc_ref_markers {
-                let marker_data = builder
-                    .ins()
-                    .iadd_imm_s(values_data, i64::from(values_size));
+                let marker_slot = match gc_ref_markers {
+                    Some(slot) => {
+                        let slot_data = &mut builder.func.sized_stack_slots[slot];
+                        debug_assert_eq!(slot_data.kind, ExplicitSlot);
+                        slot_data.size = slot_data.size.max(capacity);
+                        slot
+                    }
+                    None => builder.create_sized_stack_slot(ir::StackSlotData::new(
+                        ir::StackSlotKind::ExplicitSlot,
+                        capacity,
+                        0,
+                    )),
+                };
+                gc_ref_markers = Some(marker_slot);
+
+                let marker_data = builder.ins().stack_addr(env.pointer_type(), marker_slot, 0);
                 self.set_gc_ref_data(env, builder, marker_data);
 
-                let region = env.alias_regions.stack_slot_region(builder.func, slot);
+                let region = env
+                    .alias_regions
+                    .stack_slot_region(builder.func, marker_slot);
                 let flags = ir::MemFlagsData::trusted().with_alias_region(Some(region));
                 let zero = builder.ins().iconst(I8, 0);
                 for offset in 0..capacity {
@@ -365,7 +374,10 @@ pub(crate) mod stack_switching_helpers {
                 }
             }
 
-            slot
+            crate::func_environ::VMPayloadStackSlots {
+                values: values_slot,
+                gc_ref_markers,
+            }
         }
     }
 
