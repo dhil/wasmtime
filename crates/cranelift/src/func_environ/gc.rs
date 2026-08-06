@@ -433,6 +433,18 @@ fn intern_cont_ref(
     builder: &mut FunctionBuilder<'_>,
     contobj: ir::Value,
 ) -> ir::Value {
+    assert_eq!(ref_type.heap_type.top(), WasmHeapTopType::Cont);
+
+    if ref_type.heap_type == WasmHeapType::NoCont {
+        let zero = builder.ins().iconst(ir::types::I32, 0);
+
+        if !ref_type.nullable {
+            builder.ins().trapz(zero, TRAP_INTERNAL_ASSERT);
+        }
+
+        return zero;
+    }
+
     let (revision, contref) = fatpointer::deconstruct(func_env, &mut builder.cursor(), contobj);
     let vmctx = func_env.vmctx_val(&mut builder.cursor());
     let intern = func_env
