@@ -2241,6 +2241,9 @@ pub(crate) fn translate_switch<'a>(
             env,
             builder,
             required_capacity,
+            // No GC ref marking is required at this point. Upon
+            // return to this site `vmcontref_store_payloads` will
+            // store the markers, if needed.
             &[],
             return_values_need_gc_ref_markers,
             existing_storage,
