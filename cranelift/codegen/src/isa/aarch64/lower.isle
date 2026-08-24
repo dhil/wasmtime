@@ -2635,6 +2635,16 @@
                               next_load_ptr))))
        (output_reg next_load_ptr)))
 
+;; Rules for `stack_switch` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Currently, only the Basic model is supported.
+(rule (lower (stack_switch _ store_context_ptr load_context_ptr in_payload0))
+      (if-let (StackSwitchModel.Basic) (stack_switch_model))
+      (let ((store_context_ptr Reg (put_in_reg store_context_ptr))
+            (load_context_ptr Reg (put_in_reg load_context_ptr))
+            (in_payload0 Reg (put_in_reg in_payload0)))
+        (aarch64_stack_switch_basic store_context_ptr load_context_ptr in_payload0)))
+
 ;;; Rules for `get_{frame,stack}_pointer` and `get_return_address` ;;;;;;;;;;;;;
 
 (rule (lower (get_frame_pointer _))
