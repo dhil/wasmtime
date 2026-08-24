@@ -2941,6 +2941,107 @@ impl MachInstEmit for Inst {
                 // Nothing: this is a pseudoinstruction that serves
                 // only to constrain registers at a certain point.
             }
+            &Inst::StackSwitchBasic {
+                store_context_ptr,
+                load_context_ptr,
+                ..
+            } => {
+                // Regalloc preserves values live across this instruction for us
+                // because the instruction is declared to clobber all allocatable
+                // registers other than the payload register.
+                //
+                // x16 and x17 are reserved from regalloc and are therefore safe
+                // to use as temporaries here. Using x16 as the indirect-branch
+                // register also makes the branch compatible with a `bti c`
+                // landing pad when switching to a newly initialized stack.
+                let tmp1 = writable_spilltmp_reg();
+                let tmp2 = writable_tmp2_reg();
+                let layout = stack_switch::control_context_layout();
+                let flags = MemFlagsData::trusted();
+                let context_addr = |base, offset| AMode::UnsignedOffset {
+                    rn: base,
+                    uimm12: UImm12Scaled::maybe_from_i64(offset as i64, I64).unwrap(),
+                };
+
+                let load = |rd, base, offset| Inst::ULoad64 {
+                    rd,
+                    mem: context_addr(base, offset),
+                    flags,
+                };
+                let store = |rd, base, offset| Inst::Store64 {
+                    rd,
+                    mem: context_addr(base, offset),
+                    flags,
+                };
+
+                // Load both new frame registers before storing either old one
+                // so that load_context_ptr and store_context_ptr may alias.
+                assert_eq!(layout.stack_pointer_offset, 0);
+                assert_eq!(layout.frame_pointer_offset, 8);
+                Inst::LoadP64 {
+                    rt: tmp1,
+                    rt2: tmp2,
+                    mem: PairAMode::SignedOffset {
+                        reg: load_context_ptr,
+                        simm7: SImm7Scaled::maybe_from_i64(0, I64).unwrap(),
+                    },
+                    flags,
+                }
+                .emit(sink, emit_info, state);
+                store(fp_reg(), store_context_ptr, layout.frame_pointer_offset)
+                    .emit(sink, emit_info, state);
+                Inst::Mov {
+                    size: OperandSize::Size64,
+                    rd: writable_fp_reg(),
+                    rm: tmp2.to_reg(),
+                }
+                .emit(sink, emit_info, state);
+                Inst::Mov {
+                    size: OperandSize::Size64,
+                    rd: tmp2,
+                    rm: stack_reg(),
+                }
+                .emit(sink, emit_info, state);
+                store(
+                    tmp2.to_reg(),
+                    store_context_ptr,
+                    layout.stack_pointer_offset,
+                )
+                .emit(sink, emit_info, state);
+                Inst::AluRRImm12 {
+                    alu_op: ALUOp::Add,
+                    size: OperandSize::Size64,
+                    rd: writable_stack_reg(),
+                    rn: tmp1.to_reg(),
+                    imm12: Imm12::maybe_from_u64(0).unwrap(),
+                }
+                .emit(sink, emit_info, state);
+
+                // Load the target PC, save the address immediately following
+                // this sequence as the resume PC, and jump to the target stack.
+                load(tmp1, load_context_ptr, layout.ip_offset).emit(sink, emit_info, state);
+                let resume = sink.get_label();
+                Inst::LabelAddress {
+                    dst: tmp2,
+                    label: resume,
+                }
+                .emit(sink, emit_info, state);
+                store(tmp2.to_reg(), store_context_ptr, layout.ip_offset)
+                    .emit(sink, emit_info, state);
+                Inst::IndirectBr {
+                    rn: tmp1.to_reg(),
+                    targets: vec![],
+                }
+                .emit(sink, emit_info, state);
+
+                sink.bind_label(resume, &mut state.ctrl_plane);
+                if emit_info.isa_flags.use_bti() {
+                    Inst::Bti {
+                        targets: BranchTargetType::J,
+                    }
+                    .emit(sink, emit_info, state);
+                }
+            }
             &Inst::Ret {} => {
                 sink.put4(0xd65f03c0);
             }

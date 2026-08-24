@@ -1,0 +1,257 @@
+test compile precise-output
+set opt_level=speed
+set stack_switch_model=basic
+target aarch64
+
+;; Test code emitted for the stack switch itself. Passing the same pointer for
+;; both contexts verifies that the generated exchanges remain alias-safe.
+function %switch(i64, i64) -> i64 {
+block0(v0: i64, v1: i64):
+  v2 = stack_switch v0, v0, v1
+  return v2
+}
+
+; VCode:
+;   stp fp, lr, [sp, #-16]!
+;   mov fp, sp
+;   stp x27, x28, [sp, #-16]!
+;   stp x25, x26, [sp, #-16]!
+;   stp x23, x24, [sp, #-16]!
+;   stp x21, x22, [sp, #-16]!
+;   stp x19, x20, [sp, #-16]!
+;   stp d14, d15, [sp, #-16]!
+;   stp d12, d13, [sp, #-16]!
+;   stp d10, d11, [sp, #-16]!
+;   stp d8, d9, [sp, #-16]!
+; block0:
+;   mov x5, x0
+;   mov x0, x1
+;   x0 = stack_switch_basic x5, x5, x0
+;   ldp d8, d9, [sp], #16
+;   ldp d10, d11, [sp], #16
+;   ldp d12, d13, [sp], #16
+;   ldp d14, d15, [sp], #16
+;   ldp x19, x20, [sp], #16
+;   ldp x21, x22, [sp], #16
+;   ldp x23, x24, [sp], #16
+;   ldp x25, x26, [sp], #16
+;   ldp x27, x28, [sp], #16
+;   ldp fp, lr, [sp], #16
+;   ret
+;
+; Disassembled:
+; block0: ; offset 0x0
+;   stp x29, x30, [sp, #-0x10]!
+;   mov x29, sp
+;   stp x27, x28, [sp, #-0x10]!
+;   stp x25, x26, [sp, #-0x10]!
+;   stp x23, x24, [sp, #-0x10]!
+;   stp x21, x22, [sp, #-0x10]!
+;   stp x19, x20, [sp, #-0x10]!
+;   stp d14, d15, [sp, #-0x10]!
+;   stp d12, d13, [sp, #-0x10]!
+;   stp d10, d11, [sp, #-0x10]!
+;   stp d8, d9, [sp, #-0x10]!
+; block1: ; offset 0x2c
+;   mov x5, x0
+;   mov x0, x1
+;   ldp x16, x17, [x5]
+;   str x29, [x5, #8]
+;   mov x29, x17
+;   mov x17, sp
+;   str x17, [x5]
+;   mov sp, x16
+;   ldr x16, [x5, #0x10]
+;   adr x17, #0x5c
+;   str x17, [x5, #0x10]
+;   br x16
+;   ldp d8, d9, [sp], #0x10
+;   ldp d10, d11, [sp], #0x10
+;   ldp d12, d13, [sp], #0x10
+;   ldp d14, d15, [sp], #0x10
+;   ldp x19, x20, [sp], #0x10
+;   ldp x21, x22, [sp], #0x10
+;   ldp x23, x24, [sp], #0x10
+;   ldp x25, x26, [sp], #0x10
+;   ldp x27, x28, [sp], #0x10
+;   ldp x29, x30, [sp], #0x10
+;   ret
+
+;; Test that an integer value live across a stack switch is spilled.
+function %switch_int_clobber(i64, i64) -> i64 {
+block0(v0: i64, v1: i64):
+  v2 = iconst.i64 0
+  v3 = load.i64 v0
+  v4 = stack_switch v1, v1, v2
+  v5 = load.i64 v3
+  v6 = iadd v4, v5
+  return v6
+}
+
+; VCode:
+;   stp fp, lr, [sp, #-16]!
+;   mov fp, sp
+;   stp x27, x28, [sp, #-16]!
+;   stp x25, x26, [sp, #-16]!
+;   stp x23, x24, [sp, #-16]!
+;   stp x21, x22, [sp, #-16]!
+;   stp x19, x20, [sp, #-16]!
+;   stp d14, d15, [sp, #-16]!
+;   stp d12, d13, [sp, #-16]!
+;   stp d10, d11, [sp, #-16]!
+;   stp d8, d9, [sp, #-16]!
+;   sub sp, sp, #16
+; block0:
+;   ldr x7, [x0]
+;   str x7, [sp]
+;   movz x0, #0
+;   x0 = stack_switch_basic x1, x1, x0
+;   ldr x7, [sp]
+;   ldr x7, [x7]
+;   add x0, x0, x7
+;   add sp, sp, #16
+;   ldp d8, d9, [sp], #16
+;   ldp d10, d11, [sp], #16
+;   ldp d12, d13, [sp], #16
+;   ldp d14, d15, [sp], #16
+;   ldp x19, x20, [sp], #16
+;   ldp x21, x22, [sp], #16
+;   ldp x23, x24, [sp], #16
+;   ldp x25, x26, [sp], #16
+;   ldp x27, x28, [sp], #16
+;   ldp fp, lr, [sp], #16
+;   ret
+;
+; Disassembled:
+; block0: ; offset 0x0
+;   stp x29, x30, [sp, #-0x10]!
+;   mov x29, sp
+;   stp x27, x28, [sp, #-0x10]!
+;   stp x25, x26, [sp, #-0x10]!
+;   stp x23, x24, [sp, #-0x10]!
+;   stp x21, x22, [sp, #-0x10]!
+;   stp x19, x20, [sp, #-0x10]!
+;   stp d14, d15, [sp, #-0x10]!
+;   stp d12, d13, [sp, #-0x10]!
+;   stp d10, d11, [sp, #-0x10]!
+;   stp d8, d9, [sp, #-0x10]!
+;   sub sp, sp, #0x10
+; block1: ; offset 0x30
+;   ldr x7, [x0] ; trap: heap_oob
+;   stur x7, [sp]
+;   mov x0, #0
+;   ldp x16, x17, [x1]
+;   str x29, [x1, #8]
+;   mov x29, x17
+;   mov x17, sp
+;   str x17, [x1]
+;   mov sp, x16
+;   ldr x16, [x1, #0x10]
+;   adr x17, #0x64
+;   str x17, [x1, #0x10]
+;   br x16
+;   ldur x7, [sp]
+;   ldr x7, [x7] ; trap: heap_oob
+;   add x0, x0, x7
+;   add sp, sp, #0x10
+;   ldp d8, d9, [sp], #0x10
+;   ldp d10, d11, [sp], #0x10
+;   ldp d12, d13, [sp], #0x10
+;   ldp d14, d15, [sp], #0x10
+;   ldp x19, x20, [sp], #0x10
+;   ldp x21, x22, [sp], #0x10
+;   ldp x23, x24, [sp], #0x10
+;   ldp x25, x26, [sp], #0x10
+;   ldp x27, x28, [sp], #0x10
+;   ldp x29, x30, [sp], #0x10
+;   ret
+
+;; Test that a floating-point value live across a stack switch is spilled.
+function %switch_float_clobber(i64, i64) -> f64 {
+block0(v0: i64, v1: i64):
+  v2 = iconst.i64 0
+  v3 = load.f64 v0
+  v4 = stack_switch v1, v1, v2
+  v5 = fcvt_from_uint.f64 v4
+  v6 = fadd v5, v3
+  return v6
+}
+
+; VCode:
+;   stp fp, lr, [sp, #-16]!
+;   mov fp, sp
+;   stp x27, x28, [sp, #-16]!
+;   stp x25, x26, [sp, #-16]!
+;   stp x23, x24, [sp, #-16]!
+;   stp x21, x22, [sp, #-16]!
+;   stp x19, x20, [sp, #-16]!
+;   stp d14, d15, [sp, #-16]!
+;   stp d12, d13, [sp, #-16]!
+;   stp d10, d11, [sp, #-16]!
+;   stp d8, d9, [sp, #-16]!
+;   sub sp, sp, #16
+; block0:
+;   ldr d7, [x0]
+;   str q7, [sp]
+;   movz x0, #0
+;   x0 = stack_switch_basic x1, x1, x0
+;   ucvtf d7, x0
+;   ldr q16, [sp]
+;   fadd d0, d7, d16
+;   add sp, sp, #16
+;   ldp d8, d9, [sp], #16
+;   ldp d10, d11, [sp], #16
+;   ldp d12, d13, [sp], #16
+;   ldp d14, d15, [sp], #16
+;   ldp x19, x20, [sp], #16
+;   ldp x21, x22, [sp], #16
+;   ldp x23, x24, [sp], #16
+;   ldp x25, x26, [sp], #16
+;   ldp x27, x28, [sp], #16
+;   ldp fp, lr, [sp], #16
+;   ret
+;
+; Disassembled:
+; block0: ; offset 0x0
+;   stp x29, x30, [sp, #-0x10]!
+;   mov x29, sp
+;   stp x27, x28, [sp, #-0x10]!
+;   stp x25, x26, [sp, #-0x10]!
+;   stp x23, x24, [sp, #-0x10]!
+;   stp x21, x22, [sp, #-0x10]!
+;   stp x19, x20, [sp, #-0x10]!
+;   stp d14, d15, [sp, #-0x10]!
+;   stp d12, d13, [sp, #-0x10]!
+;   stp d10, d11, [sp, #-0x10]!
+;   stp d8, d9, [sp, #-0x10]!
+;   sub sp, sp, #0x10
+; block1: ; offset 0x30
+;   ldr d7, [x0] ; trap: heap_oob
+;   stur q7, [sp]
+;   mov x0, #0
+;   ldp x16, x17, [x1]
+;   str x29, [x1, #8]
+;   mov x29, x17
+;   mov x17, sp
+;   str x17, [x1]
+;   mov sp, x16
+;   ldr x16, [x1, #0x10]
+;   adr x17, #0x64
+;   str x17, [x1, #0x10]
+;   br x16
+;   ucvtf d7, x0
+;   ldur q16, [sp]
+;   fadd d0, d7, d16
+;   add sp, sp, #0x10
+;   ldp d8, d9, [sp], #0x10
+;   ldp d10, d11, [sp], #0x10
+;   ldp d12, d13, [sp], #0x10
+;   ldp d14, d15, [sp], #0x10
+;   ldp x19, x20, [sp], #0x10
+;   ldp x21, x22, [sp], #0x10
+;   ldp x23, x24, [sp], #0x10
+;   ldp x25, x26, [sp], #0x10
+;   ldp x27, x28, [sp], #0x10
+;   ldp x29, x30, [sp], #0x10
+;   ret
+

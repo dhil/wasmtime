@@ -996,8 +996,8 @@ pub(crate) fn define(
         alignment, and does not perform any checks on these pointers or the data
         stored there.
 
-        The instruction is experimental and only supported on x64 Linux at the
-        moment.
+        The instruction is experimental. The ``basic`` stack-switching model is
+        currently supported by the x64 and AArch64 backends.
 
         When switching from a stack A to a stack B, one of the following cases
         must apply:

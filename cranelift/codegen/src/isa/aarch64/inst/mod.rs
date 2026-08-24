@@ -18,6 +18,7 @@ use smallvec::{SmallVec, smallvec};
 pub(crate) mod regs;
 pub use self::regs::*;
 pub mod imms;
+pub(crate) mod stack_switch;
 pub use self::imms::*;
 pub mod args;
 pub use self::args::*;
@@ -801,6 +802,26 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
                 collector.reg_fixed_use(vreg, *preg);
             }
         }
+        Inst::StackSwitchBasic {
+            store_context_ptr,
+            load_context_ptr,
+            in_payload0,
+            out_payload0,
+        } => {
+            collector.reg_use(store_context_ptr);
+            collector.reg_use(load_context_ptr);
+            collector.reg_fixed_use(in_payload0, stack_switch::payload_register());
+            collector.reg_fixed_def(out_payload0, stack_switch::payload_register());
+
+            let mut clobbers = crate::isa::aarch64::abi::ALL_CLOBBERS;
+            clobbers.remove(
+                stack_switch::payload_register()
+                    .to_real_reg()
+                    .unwrap()
+                    .into(),
+            );
+            collector.reg_clobbers(clobbers);
+        }
         Inst::Ret { .. } | Inst::AuthenticatedRet { .. } => {}
         Inst::Jump { .. } => {}
         Inst::Call { info, .. } => {
@@ -1150,9 +1171,8 @@ impl MachInst for Inst {
     }
 
     fn worst_case_size() -> CodeOffset {
-        // The maximum size, in bytes, of any `Inst`'s emitted code. We have at least one case of
-        // an 8-instruction sequence (saturating int-to-float conversions) with three embedded
-        // 64-bit f64 constants.
+        // The maximum size, in bytes, of any `Inst`'s emitted code. A stack switch expands to 10
+        // instructions, plus a BTI landing pad when forward-edge CFI is enabled.
         //
         // Note that inline jump-tables handle island/pool insertion separately, so we do not need
         // to account for them here (otherwise the worst case would be 2^31 * 4, clearly not
@@ -2653,6 +2673,20 @@ impl Inst {
                     write!(&mut s, " {vreg}={preg}").unwrap();
                 }
                 s
+            }
+            &Inst::StackSwitchBasic {
+                store_context_ptr,
+                load_context_ptr,
+                in_payload0,
+                out_payload0,
+            } => {
+                let store_context_ptr = pretty_print_reg(store_context_ptr);
+                let load_context_ptr = pretty_print_reg(load_context_ptr);
+                let in_payload0 = pretty_print_reg(in_payload0);
+                let out_payload0 = pretty_print_reg(out_payload0.to_reg());
+                format!(
+                    "{out_payload0} = stack_switch_basic {store_context_ptr}, {load_context_ptr}, {in_payload0}"
+                )
             }
             &Inst::Ret {} => "ret".to_string(),
             &Inst::AuthenticatedRet { key, is_hint } => {
