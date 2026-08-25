@@ -1,6 +1,17 @@
 use crate::ErrorExt;
 use wasmtime::*;
 
+fn stack_switching_supported() -> bool {
+    cfg!(any(
+        all(target_arch = "x86_64", unix),
+        all(
+            target_arch = "aarch64",
+            target_pointer_width = "64",
+            any(target_os = "linux", target_os = "macos"),
+        ),
+    ))
+}
+
 #[test]
 #[cfg_attr(miri, ignore)]
 fn wasm_export_tags() -> Result<()> {
@@ -93,16 +104,15 @@ fn stack_switching_cont_new_high_arity_rejected() -> Result<()> {
 
     // Use a small continuation stack so we can overflow it with fewer
     // than 1000 params (the wasmparser limit for function params).
-    // With async_stack_size = 8192:
-    //   VMContinuationStack::new rounds to page size (8192), adds a
-    //   guard page, so total mmap = 12288 but usable = 8192.
-    //   800 params * 16 bytes + 64 byte header = 12864 > 8192.
+    // On hosts where async_stack_size = 8192 does not round up further,
+    // VMContinuationStack::new adds a guard page but leaves 8192 usable bytes.
+    // Then 800 params * 16 bytes + 64 byte header = 12864 > 8192.
     config.async_stack_size(8192);
     config.max_wasm_stack(4096);
 
     let Ok(engine) = Engine::new(&config) else {
         // Stack switching is not supported on all platforms; skip gracefully.
-        assert!(!(cfg!(target_arch = "x86_64") && cfg!(unix)));
+        assert!(!stack_switching_supported());
         return Ok(());
     };
 
@@ -110,6 +120,15 @@ fn stack_switching_cont_new_high_arity_rejected() -> Result<()> {
     // 800 params stays under wasmparser's MAX_WASM_FUNCTION_PARAMS (1000)
     // but exceeds the 8192-byte usable stack space.
     let n_params = 800;
+    let required = n_params * std::mem::size_of::<ValRaw>() + 0x40;
+    let usable = 8192usize.next_multiple_of(rustix::param::page_size());
+    if required <= usable {
+        // Wasm's function-arity limit makes it impossible to overflow a
+        // minimum-sized continuation stack on hosts with sufficiently large
+        // pages (notably macOS AArch64 with 16-KiB pages). The bounds check is
+        // covered independently by a unit test in the stack implementation.
+        return Ok(());
+    }
     let params: String = (0..n_params).map(|_| " i32").collect();
     let wat = format!(
         r#"(module
@@ -134,12 +153,12 @@ fn stack_switching_cont_new_high_arity_rejected() -> Result<()> {
     return Ok(());
 }
 
-// Regression test for #13703: with async_stack_size=8192 and 600 params, the
-// control data (600 * 16 + 64 = 9664 bytes) fits within the total mmap
-// allocation (12288 = 8192 + 4096 guard) but exceeds the usable stack space
-// (8192). Before the fix, the bounds check compared against self.len (which
-// includes the guard page), so this case passed the check and then wrote
-// into the guard page, causing a segfault.
+// Regression test for #13703: on a host with 4-KiB pages, with
+// async_stack_size=8192 and 600 params, the control data (600 * 16 + 64 = 9664
+// bytes) fits within the total mmap allocation (12288 = 8192 + 4096 guard) but
+// exceeds the usable stack space (8192). Before the fix, the bounds check
+// compared against self.len (which includes the guard page), so this case
+// passed the check and then wrote into the guard page, causing a segfault.
 #[test]
 #[cfg_attr(miri, ignore)]
 fn stack_switching_cont_new_guard_page_arity_rejected() -> Result<()> {
@@ -152,7 +171,7 @@ fn stack_switching_cont_new_guard_page_arity_rejected() -> Result<()> {
 
     let Ok(engine) = Engine::new(&config) else {
         // Stack switching is not supported on all platforms; skip gracefully.
-        assert!(!(cfg!(target_arch = "x86_64") && cfg!(unix)));
+        assert!(!stack_switching_supported());
         return Ok(());
     };
 
@@ -160,6 +179,12 @@ fn stack_switching_cont_new_guard_page_arity_rejected() -> Result<()> {
     // This exceeds the 8192-byte usable stack but fits within the
     // 12288-byte total allocation (including guard page).
     let n_params = 600;
+    let required = n_params * std::mem::size_of::<ValRaw>() + 0x40;
+    let usable = 8192usize.next_multiple_of(rustix::param::page_size());
+    if required <= usable {
+        // See `stack_switching_cont_new_high_arity_rejected` above.
+        return Ok(());
+    }
     let params: String = (0..n_params).map(|_| " i32").collect();
     let wat = format!(
         r#"(module

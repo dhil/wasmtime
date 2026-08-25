@@ -8,7 +8,17 @@ use crate::runtime::vm::stack_switching::VMHostArray;
 use crate::runtime::vm::{VMContext, VMFuncRef, ValRaw};
 
 cfg_select! {
-    all(feature = "stack-switching", unix, target_arch = "x86_64") => {
+    all(
+        feature = "stack-switching",
+        target_pointer_width = "64",
+        any(
+            all(unix, target_arch = "x86_64"),
+            all(
+                target_arch = "aarch64",
+                any(target_os = "linux", target_os = "macos"),
+            ),
+        ),
+    ) => {
         mod unix;
         use unix as imp;
     }

@@ -3,11 +3,11 @@
 //!
 //! ```text
 //! 0xB000 +-----------------------+   <- top of stack (TOS)
-//!        | saved RIP             |
+//!        | saved PC              |
 //! 0xAff8 +-----------------------+
-//!        | saved RBP             |
+//!        | saved FP              |
 //! 0xAff0 +-----------------------+
-//!        | saved RSP             |
+//!        | saved SP              |
 //! 0xAfe8 +-----------------------+   <- beginning of "control context",
 //!        | args_capacity         |
 //! 0xAfe0 +-----------------------+
@@ -30,16 +30,16 @@
 //!
 //! 1.
 //! If the continuation is currently active (i.e., running directly, or ancestor
-//! of the running continuation), it stores the PC, RSP, and RBP of the *parent*
+//! of the running continuation), it stores the PC, SP, and FP of the *parent*
 //! of the running continuation.
 //!
 //! 2.
-//! If the picture shows a suspended computation, the fields store the PC, RSP,
-//! and RBP at the time of the suspension.
+//! If the picture shows a suspended computation, the fields store the PC, SP,
+//! and FP at the time of the suspension.
 //!
 //! Note that this design ensures that external tools can construct backtraces
 //! in the presence of stack switching by using frame pointers only: The
-//! wasmtime_continuation_start trampoline uses the address of the RBP field in the
+//! wasmtime_continuation_start trampoline uses the address of the FP field in the
 //! control context (0xAff0 above) as its frame pointer. This means that when
 //! passing the wasmtime_continuation_start frame while doing frame pointer walking,
 //! the parent of that frame is the last frame in the parent of this
@@ -83,6 +83,16 @@ pub struct VMContinuationStack {
     len: usize,
     // allocation strategy
     allocator: Allocator,
+}
+
+fn ensure_control_data_fits(total_control_size: usize, usable_len: usize) -> Result<()> {
+    ensure!(
+        total_control_size <= usable_len,
+        "continuation function type requires {total_control_size} bytes \
+         of stack control data, which exceeds the {usable_len}-byte \
+         usable stack allocation",
+    );
+    Ok(())
 }
 
 impl VMContinuationStack {
@@ -160,7 +170,7 @@ impl VMContinuationStack {
 
     pub fn control_context_instruction_pointer(&self) -> usize {
         // See picture at top of this file:
-        // RIP is stored 8 bytes below top of stack.
+        // PC is stored 8 bytes below top of stack.
         unsafe {
             let ptr = self.top.sub(8).cast::<usize>();
             *ptr
@@ -169,7 +179,7 @@ impl VMContinuationStack {
 
     pub fn control_context_frame_pointer(&self) -> usize {
         // See picture at top of this file:
-        // RBP is stored 16 bytes below top of stack.
+        // FP is stored 16 bytes below top of stack.
         unsafe {
             let ptr = self.top.sub(16).cast::<usize>();
             *ptr
@@ -178,7 +188,7 @@ impl VMContinuationStack {
 
     pub fn control_context_stack_pointer(&self) -> usize {
         // See picture at top of this file:
-        // RSP is stored 24 bytes below top of stack.
+        // SP is stored 24 bytes below top of stack.
         unsafe {
             let ptr = self.top.sub(24).cast::<usize>();
             *ptr
@@ -186,13 +196,13 @@ impl VMContinuationStack {
     }
 
     /// This function installs the launchpad for the computation to run on the
-    /// fiber, such that executing a `stack_switch` instruction on the stack
+    /// continuation, such that executing a `stack_switch` instruction on the stack
     /// actually runs the desired computation.
     ///
     /// Concretely, switching to the stack prepared by this function
     /// causes that we enter `wasmtime_continuation_start`, which then in turn
-    /// calls `fiber_start` with  the following arguments:
-    /// TOS, func_ref, caller_vmctx, args_ptr, args_capacity
+    /// calls `fiber_start` with the following arguments:
+    /// func_ref, caller_vmctx, args_ptr, return_value_count
     ///
     /// Note that at this point we also allocate the args buffer
     /// (see picture at the top of this file).
@@ -210,8 +220,8 @@ impl VMContinuationStack {
     ///       TOS       | Contents
     ///  ---------------|-------------------------------------------------------
     ///       -0x08     | address of wasmtime_continuation_start function (future PC)
-    ///       -0x10     | TOS - 0x10 (future RBP)
-    ///       -0x18     | TOS - 0x40 - s (future RSP)
+    ///       -0x10     | TOS - 0x10 (future FP)
+    ///       -0x18     | TOS - 0x40 - s (future SP)
     ///       -0x20     | args_capacity
     ///
     ///
@@ -268,12 +278,7 @@ impl VMContinuationStack {
                 Allocator::Mmap => self.len.saturating_sub(page_size),
                 Allocator::Custom => self.len,
             };
-            ensure!(
-                total_control_size <= usable_len,
-                "continuation function type requires {total_control_size} bytes \
-                 of stack control data, which exceeds the {usable_len}-byte \
-                 usable stack allocation",
-            );
+            ensure_control_data_fits(total_control_size, usable_len)?;
             let args_data_ptr = if args_capacity == 0 {
                 ptr::null_mut()
             } else {
@@ -303,6 +308,12 @@ impl VMContinuationStack {
 
         Ok(())
     }
+}
+
+#[test]
+fn control_data_must_fit_within_the_usable_stack() {
+    assert!(ensure_control_data_fits(0x2040, 0x2000).is_err());
+    assert!(ensure_control_data_fits(0x2040, 0x2040).is_ok());
 }
 
 impl Drop for VMContinuationStack {
@@ -369,10 +380,14 @@ cfg_select! {
         mod x86_64;
         use x86_64::*;
     }
+    target_arch = "aarch64" => {
+        mod aarch64;
+        use aarch64::*;
+    }
     _ => {
         // Note that this should be unreachable: In stack.rs, we currently select
-        // the module defined in the current file only if we are on unix AND
-        // x86_64.
+        // the module defined in the current file only on supported 64-bit Unix
+        // architectures.
         compile_error!("the stack switching feature is not supported on this CPU architecture");
     }
 }

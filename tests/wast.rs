@@ -70,7 +70,15 @@ fn main() {
     // leave the full combinatorial matrix and such to fuzz testing which
     // configures many more settings than those configured here.
     for test in tests {
-        if test.config.stack_switching() && !cfg!(all(target_arch = "x86_64", target_os = "linux"))
+        if test.config.stack_switching()
+            && !cfg!(any(
+                all(target_arch = "x86_64", target_os = "linux"),
+                all(
+                    target_arch = "aarch64",
+                    target_pointer_width = "64",
+                    any(target_os = "linux", target_os = "macos"),
+                ),
+            ))
         {
             continue;
         }
