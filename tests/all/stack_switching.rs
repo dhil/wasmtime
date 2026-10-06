@@ -1557,3 +1557,60 @@ fn corruption_of_callthread_state_when_host_function_is_called_on_continuation()
     assert_eq!(result, 1);
     Ok(())
 }
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn cont_new_rejects_signature_without_runtime_headroom() -> Result<()> {
+    let mut config = Config::new();
+    config.wasm_stack_switching(true);
+    config.wasm_function_references(true);
+    config.wasm_exceptions(true);
+
+    // Leave 4 KiB above the continuation's required 64-KiB runtime headroom.
+    // A zero-arity continuation fits, while 300 parameters need 4,864 bytes
+    // of control data and must therefore be rejected.
+    config.async_stack_size(68 << 10);
+    config.max_wasm_stack(4 << 10);
+
+    let engine = Engine::new(&config)?;
+    let mut store = Store::new(&engine, ());
+
+    let params = " i32".repeat(300);
+    let module = Module::new(
+        &engine,
+        format!(
+            r#"
+                (module
+                    (type $small_ft (func))
+                    (type $small_ct (cont $small_ft))
+                    (type $large_ft (func (param{params})))
+                    (type $large_ct (cont $large_ft))
+
+                    (func $small_target)
+                    (func $large_target (type $large_ft))
+                    (elem declare func $small_target $large_target)
+
+                    (func (export "small")
+                        (drop (cont.new $small_ct (ref.func $small_target))))
+                    (func (export "large")
+                        (drop (cont.new $large_ct (ref.func $large_target))))
+                )
+            "#,
+        ),
+    )?;
+    let instance = Instance::new(&mut store, &module, &[])?;
+
+    let small = instance.get_typed_func::<(), ()>(&mut store, "small")?;
+    small.call(&mut store, ())?;
+
+    let large = instance.get_typed_func::<(), ()>(&mut store, "large")?;
+    let error = large
+        .call(&mut store, ())
+        .expect_err("large continuation signature should exceed the stack allocation");
+    assert!(
+        format!("{error:#}").contains("65536 bytes of runtime headroom"),
+        "unexpected error: {error:#}",
+    );
+
+    Ok(())
+}
