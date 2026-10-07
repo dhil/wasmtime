@@ -684,6 +684,26 @@ macro_rules! for_each_vm_type {
                 #[aggregate]
                 pub values: VMPayloads,
 
+                /// Revision for which `gc_cached_id` was last populated.
+                ///
+                /// This cache is maintained by the runtime and is not read or
+                /// written by compiled Wasm.
+                pub gc_cached_revision: usize,
+
+                /// Epoch of the continuation-reference table that owns
+                /// `gc_cached_id`. Epoch zero denotes an empty cache.
+                ///
+                /// This cache is maintained by the runtime and is not read or
+                /// written by compiled Wasm.
+                pub gc_cached_epoch: usize,
+
+                /// The nonzero continuation-reference table ID cached for the
+                /// pair (`gc_cached_revision`, `gc_cached_epoch`).
+                ///
+                /// This cache is maintained by the runtime and is not read or
+                /// written by compiled Wasm.
+                pub gc_cached_id: u32,
+
                 /// Tells the compiler that this structure has potential
                 /// self-references, through `last_ancestor`.
                 ///

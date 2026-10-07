@@ -167,16 +167,22 @@ impl VMContRef {
         let args = VMPayloads::empty();
         let values = VMPayloads::empty();
         let revision = 0;
+        let gc_cached_revision = 0;
+        let gc_cached_epoch = 0;
+        let gc_cached_id = 0;
         let _marker = PhantomPinned;
 
         Self {
             common_stack_information,
             parent_chain,
             last_ancestor,
+            revision,
             stack,
             args,
             values,
-            revision,
+            gc_cached_revision,
+            gc_cached_epoch,
+            gc_cached_id,
             _marker,
         }
     }
