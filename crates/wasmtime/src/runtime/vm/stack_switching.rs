@@ -209,6 +209,21 @@ pub fn cont_new(
     result_count: u32,
     gc_refs: bool,
 ) -> crate::Result<*mut VMContRef> {
+    // Avoid creating a Rust reference here: dynamically laid-out VMContext
+    // aggregates are not guaranteed to give `VMFuncRef` its native alignment.
+    // SAFETY: compiled `cont.new` code passes a non-null pointer to a live
+    // `VMFuncRef` whose type supplied `param_count` and `result_count`.
+    let callee_vmctx = unsafe {
+        core::ptr::addr_of!((*func.cast::<crate::vm::VMFuncRef>()).vmctx).read_unaligned()
+    };
+    // SAFETY: every context stored in a `VMFuncRef` starts with its context
+    // magic. The pointer is valid for the lifetime of the function reference.
+    let is_core_wasm = unsafe {
+        callee_vmctx.as_ptr().cast::<u32>().read_unaligned() == wasmtime_environ::VMCONTEXT_MAGIC
+    };
+    let runtime_headroom =
+        stack::continuation_runtime_headroom(is_core_wasm, param_count, result_count)?;
+
     let instance = store.instance_mut(instance);
     let caller_vmctx = instance.vmctx();
 
@@ -233,6 +248,7 @@ pub fn cont_new(
         param_count,
         result_count,
         gc_refs,
+        runtime_headroom,
     )?;
 
     // Now that the initial stack pointer was set by the initialization
