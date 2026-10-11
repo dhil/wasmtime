@@ -83,14 +83,6 @@ pub enum Allocator {
 #[cfg(asan)]
 static ASAN_STACKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
 
-/// Native stack space which must remain below a continuation's persistent
-/// control data.
-///
-/// This covers the continuation entry trampoline and Wasmtime's runtime call
-/// machinery. It is a defense-in-depth minimum, not a bound on arbitrary host
-/// function stack usage.
-const CONTINUATION_RUNTIME_HEADROOM: usize = 64 << 10;
-
 struct ContinuationStackLayout {
     args_capacity: u32,
     args_data_size: usize,
@@ -100,7 +92,12 @@ struct ContinuationStackLayout {
 }
 
 impl ContinuationStackLayout {
-    fn new(parameter_count: u32, return_value_count: u32, gc_refs: bool) -> Result<Self> {
+    fn new(
+        parameter_count: u32,
+        return_value_count: u32,
+        gc_refs: bool,
+        runtime_headroom: usize,
+    ) -> Result<Self> {
         let args_capacity = std::cmp::max(parameter_count, return_value_count);
         let args_data_size = usize::try_from(args_capacity)?
             .checked_mul(std::mem::size_of::<ValRaw>())
@@ -139,7 +136,7 @@ impl ContinuationStackLayout {
             )
         })?;
         let required_stack_size = total_control_size
-            .checked_add(CONTINUATION_RUNTIME_HEADROOM)
+            .checked_add(runtime_headroom)
             .ok_or_else(|| {
                 format_err!(
                     "continuation function type with {args_capacity} args \
@@ -365,8 +362,14 @@ impl VMContinuationStack {
         parameter_count: u32,
         return_value_count: u32,
         gc_refs: bool,
+        runtime_headroom: usize,
     ) -> Result<()> {
-        let layout = ContinuationStackLayout::new(parameter_count, return_value_count, gc_refs)?;
+        let layout = ContinuationStackLayout::new(
+            parameter_count,
+            return_value_count,
+            gc_refs,
+            runtime_headroom,
+        )?;
 
         // Ensure the control data (fixed header + args buffer) fits within the
         // usable stack space while leaving enough room to enter and run the
@@ -388,7 +391,7 @@ impl VMContinuationStack {
         ensure!(
             layout.required_stack_size <= usable_len,
             "continuation function type requires {} bytes of stack control data \
-             and {CONTINUATION_RUNTIME_HEADROOM} bytes of runtime headroom, which \
+             and {runtime_headroom} bytes of runtime headroom, which \
              exceeds the {usable_len}-byte usable stack allocation",
             layout.total_control_size,
         );

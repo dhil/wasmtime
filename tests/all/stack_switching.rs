@@ -1566,16 +1566,22 @@ fn cont_new_rejects_signature_without_runtime_headroom() -> Result<()> {
     config.wasm_function_references(true);
     config.wasm_exceptions(true);
 
-    // Leave 4 KiB above the continuation's required 64-KiB runtime headroom.
-    // A zero-arity continuation fits, while 300 parameters need 4,864 bytes
-    // of control data and must therefore be rejected.
-    config.async_stack_size(68 << 10);
+    // A 32-KiB production stack has ample room for ordinary continuations and
+    // can even initialize the 511-parameter signature from #13020. A still
+    // larger signature must be rejected when its persistent control data,
+    // compiled array-to-Wasm trampoline frame, and outgoing arguments cannot
+    // all fit.
+    // ASan retains its 64-KiB minimum runtime headroom, so give that build just
+    // enough additional room to preserve the same boundary in this test.
+    config.async_stack_size(if cfg!(asan) { 76 << 10 } else { 32 << 10 });
     config.max_wasm_stack(4 << 10);
 
     let engine = Engine::new(&config)?;
     let mut store = Store::new(&engine, ());
 
-    let params = " i32".repeat(300);
+    let medium_params = " i32".repeat(511);
+    let medium_args = " (i32.const 0)".repeat(511);
+    let large_params = " i32".repeat(800);
     let module = Module::new(
         &engine,
         format!(
@@ -1583,15 +1589,21 @@ fn cont_new_rejects_signature_without_runtime_headroom() -> Result<()> {
                 (module
                     (type $small_ft (func))
                     (type $small_ct (cont $small_ft))
-                    (type $large_ft (func (param{params})))
+                    (type $medium_ft (func (param{medium_params})))
+                    (type $medium_ct (cont $medium_ft))
+                    (type $large_ft (func (param{large_params})))
                     (type $large_ct (cont $large_ft))
 
                     (func $small_target)
+                    (func $medium_target (type $medium_ft))
                     (func $large_target (type $large_ft))
-                    (elem declare func $small_target $large_target)
+                    (elem declare func $small_target $medium_target $large_target)
 
                     (func (export "small")
                         (drop (cont.new $small_ct (ref.func $small_target))))
+                    (func (export "medium")
+                        (resume $medium_ct {medium_args}
+                            (cont.new $medium_ct (ref.func $medium_target))))
                     (func (export "large")
                         (drop (cont.new $large_ct (ref.func $large_target))))
                 )
@@ -1603,14 +1615,184 @@ fn cont_new_rejects_signature_without_runtime_headroom() -> Result<()> {
     let small = instance.get_typed_func::<(), ()>(&mut store, "small")?;
     small.call(&mut store, ())?;
 
+    let medium = instance.get_typed_func::<(), ()>(&mut store, "medium")?;
+    medium.call(&mut store, ())?;
+
     let large = instance.get_typed_func::<(), ()>(&mut store, "large")?;
     let error = large
         .call(&mut store, ())
         .expect_err("large continuation signature should exceed the stack allocation");
     assert!(
-        format!("{error:#}").contains("65536 bytes of runtime headroom"),
+        format!("{error:#}").contains("bytes of runtime headroom"),
         "unexpected error: {error:#}",
     );
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn zero_arity_continuation_with_large_wasm_frame_traps_stack_overflow() -> Result<()> {
+    const LOCAL_COUNT: usize = 1024;
+
+    let mut config = Config::new();
+    config.wasm_stack_switching(true);
+    config.wasm_function_references(true);
+    config.wasm_exceptions(true);
+    config.async_stack_size(32 << 10);
+    config.max_wasm_stack(4 << 10);
+
+    let engine = Engine::new(&config)?;
+    let mut store = Store::new(&engine, ());
+
+    // Keep every local live across a call so that Cranelift cannot eliminate
+    // them or keep their values solely in volatile registers.
+    let locals = " i64".repeat(LOCAL_COUNT);
+    let initialize = (0..LOCAL_COUNT)
+        .map(|i| {
+            format!(
+                "(local.set {i} (i64.load offset={} (i32.const 0)))",
+                i * std::mem::size_of::<i64>()
+            )
+        })
+        .collect::<String>();
+    let consume = (0..LOCAL_COUNT)
+        .map(|i| format!("(global.set $sum (i64.add (global.get $sum) (local.get {i})))"))
+        .collect::<String>();
+
+    let module = Module::new(
+        &engine,
+        format!(
+            r#"
+                (module
+                    (type $ft (func))
+                    (type $ct (cont $ft))
+                    (memory 1)
+                    (global $sum (mut i64) (i64.const 0))
+
+                    (func $opaque)
+                    (func $target
+                        (local{locals})
+                        {initialize}
+                        (call $opaque)
+                        {consume})
+                    (elem declare func $target)
+
+                    (func (export "new")
+                        (drop (cont.new $ct (ref.func $target))))
+                    (func (export "resume")
+                        (resume $ct (cont.new $ct (ref.func $target))))
+                )
+            "#,
+        ),
+    )?;
+    let instance = Instance::new(&mut store, &module, &[])?;
+
+    // The target has zero arity, so creation only needs the small
+    // signature-derived trampoline allowance.
+    let new = instance.get_typed_func::<(), ()>(&mut store, "new")?;
+    new.call(&mut store, ())?;
+
+    // The large body frame is governed by the ordinary Wasm stack limit and
+    // must trap cleanly when the continuation is resumed.
+    let resume = instance.get_typed_func::<(), ()>(&mut store, "resume")?;
+    let error = resume
+        .call(&mut store, ())
+        .expect_err("the target's large Wasm frame should exceed max_wasm_stack");
+    assert_eq!(error.downcast_ref::<Trap>(), Some(&Trap::StackOverflow));
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn cont_new_host_function_with_large_initial_frame() -> Result<()> {
+    const PARAMETER_COUNT: usize = 300;
+    const HOST_FRAME_SIZE: usize = 96 << 10;
+
+    #[inline(never)]
+    fn host_with_large_initial_frame(
+        _caller: Caller<'_, ()>,
+        params: &[Val],
+        _results: &mut [Val],
+    ) -> Result<()> {
+        assert_eq!(params.len(), PARAMETER_COUNT);
+
+        // Use volatile writes to force this storage to remain in the native
+        // frame and touch every page of it.
+        let mut frame = std::mem::MaybeUninit::<[u8; HOST_FRAME_SIZE]>::uninit();
+        let frame = frame.as_mut_ptr().cast::<u8>();
+        for offset in (0..HOST_FRAME_SIZE).step_by(4096) {
+            unsafe { frame.add(offset).write_volatile(0) };
+        }
+        std::hint::black_box(frame);
+        Ok(())
+    }
+
+    let params = " i32".repeat(PARAMETER_COUNT);
+    let args = " (i32.const 0)".repeat(PARAMETER_COUNT);
+    let wat = format!(
+        r#"
+            (module
+                (type $ft (func (param{params})))
+                (type $ct (cont $ft))
+                (import "" "" (func $host (type $ft)))
+                (elem declare func $host)
+
+                (func (export "go")
+                    (resume $ct {args}
+                        (cont.new $ct (ref.func $host))))
+            )
+        "#,
+    );
+
+    // Leave only 4 KiB above the conservative headroom used for opaque host
+    // frames. The continuation's parameter storage does not fit in that
+    // remainder, so `cont.new` must fail before entering the host function.
+    {
+        let mut config = Config::new();
+        config.wasm_stack_switching(true);
+        config.wasm_function_references(true);
+        config.wasm_exceptions(true);
+        config.async_stack_size(68 << 10);
+        config.max_wasm_stack(4 << 10);
+
+        let engine = Engine::new(&config)?;
+        let mut store = Store::new(&engine, ());
+        let module = Module::new(&engine, &wat)?;
+        let host_ty = FuncType::new(&engine, (0..PARAMETER_COUNT).map(|_| ValType::I32), []);
+        let host = Func::new(&mut store, host_ty, host_with_large_initial_frame);
+        let instance = Instance::new(&mut store, &module, &[host.into()])?;
+        let go = instance.get_typed_func::<(), ()>(&mut store, "go")?;
+
+        let error = go
+            .call(&mut store, ())
+            .expect_err("large host-function frame should exceed the stack allocation");
+        assert!(
+            format!("{error:#}").contains("65536 bytes of runtime headroom"),
+            "unexpected error: {error:#}",
+        );
+    }
+
+    // With enough stack space, resume the same continuation and actually
+    // enter the host function's large native frame.
+    {
+        let mut config = Config::new();
+        config.wasm_stack_switching(true);
+        config.wasm_function_references(true);
+        config.wasm_exceptions(true);
+        config.async_stack_size(256 << 10);
+        config.max_wasm_stack(4 << 10);
+
+        let engine = Engine::new(&config)?;
+        let mut store = Store::new(&engine, ());
+        let module = Module::new(&engine, &wat)?;
+        let host_ty = FuncType::new(&engine, (0..PARAMETER_COUNT).map(|_| ValType::I32), []);
+        let host = Func::new(&mut store, host_ty, host_with_large_initial_frame);
+        let instance = Instance::new(&mut store, &module, &[host.into()])?;
+        let go = instance.get_typed_func::<(), ()>(&mut store, "go")?;
+        go.call(&mut store, ())?;
+    }
 
     Ok(())
 }

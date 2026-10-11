@@ -2,10 +2,57 @@
 //! specialized for executing stack switching continuations.
 
 use crate::Result;
+use crate::prelude::*;
 use core::ops::Range;
 
 use crate::runtime::vm::VMPayloads;
-use crate::runtime::vm::{VMContext, VMFuncRef};
+use crate::runtime::vm::{VMContext, VMFuncRef, ValRaw, host_page_size};
+
+/// Headroom retained when the array-call target is not core Wasm. This also
+/// remains the minimum under ASan, whose stack-switching bookkeeping requires
+/// substantially more room than the ordinary production entry path.
+const CONSERVATIVE_RUNTIME_HEADROOM: usize = 64 << 10;
+
+/// Calculate the native stack space needed to reach the continuation's Wasm
+/// entry function.
+///
+/// For core Wasm on x86-64, the array-to-Wasm trampoline needs at most one
+/// `ValRaw`-sized spill slot per live parameter or result and one dynamically
+/// allocated outgoing slot per parameter. One host page is retained for the
+/// continuation entry stub, Rust's `fiber_start` frame, call setup, and
+/// compiler variation. This deliberately derives the bound from the signature
+/// rather than adding stack-frame metadata to compiled artifacts.
+///
+/// Other array-call targets have opaque native frames, so retain the existing
+/// conservative bound for them. ASan builds retain that bound as a minimum as
+/// well.
+pub(crate) fn continuation_runtime_headroom(
+    is_core_wasm: bool,
+    parameter_count: u32,
+    return_value_count: u32,
+) -> Result<usize> {
+    if !is_core_wasm {
+        return Ok(CONSERVATIVE_RUNTIME_HEADROOM);
+    }
+
+    let slot_size = core::mem::size_of::<ValRaw>();
+    let trampoline_values_size = usize::try_from(parameter_count.max(return_value_count))?
+        .checked_mul(slot_size)
+        .ok_or_else(|| format_err!("continuation trampoline stack size overflow"))?;
+    let outgoing_args_size = usize::try_from(parameter_count)?
+        .checked_mul(slot_size)
+        .ok_or_else(|| format_err!("continuation parameter stack size overflow"))?;
+    let headroom = host_page_size()
+        .checked_add(trampoline_values_size)
+        .and_then(|n| n.checked_add(outgoing_args_size))
+        .ok_or_else(|| format_err!("continuation runtime headroom overflow"))?;
+
+    Ok(if cfg!(asan) {
+        headroom.max(CONSERVATIVE_RUNTIME_HEADROOM)
+    } else {
+        headroom
+    })
+}
 
 cfg_select! {
     all(feature = "stack-switching", unix, target_arch = "x86_64") => {
@@ -116,6 +163,7 @@ impl VMContinuationStack {
         parameter_count: u32,
         return_value_count: u32,
         gc_refs: bool,
+        runtime_headroom: usize,
     ) -> Result<()> {
         self.0.initialize(
             func_ref,
@@ -124,6 +172,7 @@ impl VMContinuationStack {
             parameter_count,
             return_value_count,
             gc_refs,
+            runtime_headroom,
         )
     }
 }
