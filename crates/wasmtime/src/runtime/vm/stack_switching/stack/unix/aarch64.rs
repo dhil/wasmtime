@@ -15,6 +15,7 @@ pub fn wasmtime_continuation_start_address() -> *const () {
 // loading a freshly initialized continuation's control context. At entry:
 //
 //   SP: TOS - 0x40 - (16 * `args_capacity`)
+//                  - align_up(`args_capacity`, 16)
 //   FP: TOS - 0x10
 //
 // The four words at SP contain, in order, `return_value_count`, `args`,

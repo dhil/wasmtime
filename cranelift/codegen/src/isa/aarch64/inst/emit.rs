@@ -3452,6 +3452,8 @@ impl MachInstEmit for Inst {
                 load_context_ptr,
                 ..
             } => {
+                let stack_map = state.take_stack_map();
+
                 // Regalloc preserves values live across this instruction for us
                 // because the instruction is declared to clobber all allocatable
                 // registers other than the payload register.
@@ -3541,6 +3543,9 @@ impl MachInstEmit for Inst {
                 .emit(sink, emit_info, state);
 
                 sink.bind_label(resume, &mut state.ctrl_plane);
+                if let Some(s) = stack_map {
+                    sink.push_user_stack_map(state, sink.cur_offset(), s);
+                }
                 if emit_info.isa_flags.use_bti() {
                     Inst::Bti {
                         targets: BranchTargetType::J,
