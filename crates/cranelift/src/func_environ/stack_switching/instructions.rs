@@ -1539,15 +1539,18 @@ pub(crate) fn translate_cont_bind<'a>(
     args: &[ir::Value],
     arg_types: &[WasmValType],
 ) -> ir::Value {
-    let (witness, contref) = fatpointer::deconstruct(env, &mut builder.cursor(), contobj);
+    let (_witness, contref) = fatpointer::deconstruct(env, &mut builder.cursor(), contobj);
 
     // The typing rules for cont.bind allow a null reference to be passed to it.
     env.trapz(builder, contref, crate::TRAP_NULL_REFERENCE);
 
     let mut vmcontref = helpers::VMContRef::new(contref);
     let revision = vmcontref.get_revision(env, builder);
-    let evidence = builder.ins().icmp(IntCC::Equal, witness, revision);
-    env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+    #[cfg(not(feature = "wasmfx_unsafe_continuations"))]
+    {
+        let evidence = builder.ins().icmp(IntCC::Equal, _witness, revision);
+        env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+    }
 
     vmcontref_store_payloads(env, builder, args, arg_types, contref);
 
@@ -1736,7 +1739,7 @@ fn translate_resume_impl<'a>(
         builder.switch_to_block(resume_block);
         builder.seal_block(resume_block);
 
-        let (witness, resume_contref) =
+        let (_witness, resume_contref) =
             fatpointer::deconstruct(env, &mut builder.cursor(), resume_contobj);
 
         // The typing rules for resume allow a null reference to be passed to it.
@@ -1745,8 +1748,11 @@ fn translate_resume_impl<'a>(
         let mut vmcontref = helpers::VMContRef::new(resume_contref);
 
         let revision = vmcontref.get_revision(env, builder);
-        let evidence = builder.ins().icmp(IntCC::Equal, revision, witness);
-        env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+        #[cfg(not(feature = "wasmfx_unsafe_continuations"))]
+        {
+            let evidence = builder.ins().icmp(IntCC::Equal, revision, _witness);
+            env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+        }
 
         match resume_payload {
             ResumePayload::Values(resume_args) => {
@@ -2289,7 +2295,7 @@ pub(crate) fn translate_switch<'a>(
     // `switchee_contref` to `switchee_contref.last_ancestor` (i.e., the end of
     // the parent chain starting at `switchee_contref`).
     let switchee_contref = {
-        let (witness, target_contref) =
+        let (_witness, target_contref) =
             fatpointer::deconstruct(env, &mut builder.cursor(), switchee_contobj);
 
         // The typing rules for switch allow a null reference to be passed to it.
@@ -2298,8 +2304,11 @@ pub(crate) fn translate_switch<'a>(
         let mut target_contref = helpers::VMContRef::new(target_contref);
 
         let revision = target_contref.get_revision(env, builder);
-        let evidence = builder.ins().icmp(IntCC::Equal, revision, witness);
-        env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+        #[cfg(not(feature = "wasmfx_unsafe_continuations"))]
+        {
+            let evidence = builder.ins().icmp(IntCC::Equal, revision, _witness);
+            env.trapz(builder, evidence, crate::TRAP_CONTINUATION_ALREADY_CONSUMED);
+        }
         let _next_revision = target_contref.incr_revision(env, builder, revision);
         target_contref
     };

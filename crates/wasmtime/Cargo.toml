@@ -307,6 +307,13 @@ stack-switching = [
   "wasmtime-environ/stack-switching",
 ]
 
+# Disables generated-code checks which enforce that continuation objects are
+# consumed linearly. This is unsound and intended only for WasmFX experiments.
+wasmfx_unsafe_continuations = [
+  "stack-switching",
+  "wasmtime-cranelift?/wasmfx_unsafe_continuations",
+]
+
 # Controls whether backtraces will attempt to parse DWARF information in
 # WebAssembly modules and components to provide filenames and line numbers in
 # stack traces.
