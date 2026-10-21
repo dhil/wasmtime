@@ -309,6 +309,14 @@ stack-switching = [
   "wasmtime-environ/stack-switching",
 ]
 
+# Enables the experimental WasmFX continuation-stack pooling allocator. This
+# reuses the pooling allocator's stack limits while leaving the upstream async
+# fiber-stack pool unchanged.
+wasmfx-stack-pooling = [
+  "pooling-allocator",
+  "stack-switching",
+]
+
 # Controls whether backtraces will attempt to parse DWARF information in
 # WebAssembly modules and components to provide filenames and line numbers in
 # stack traces.
